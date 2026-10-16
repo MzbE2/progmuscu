@@ -1,0 +1,40 @@
+rules_version = '2';
+// =====================================================================
+//  Règles de sécurité Firestore — Muscu SUAPS
+//  Comptes Gmail enseignants autorisés (en minuscules) : ajoutez-en dans la liste ci-dessous
+// =====================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estProf() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ["florianeude@gmail.com", "mzubaloff@gmail.com"];
+    }
+
+    // Liste des appareils : lisible par tous, modifiable par l'enseignant
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if estProf();
+    }
+
+    // Profils étudiants : le code (identifiant du document) sert de clé d'accès
+    match /etudiants/{code} {
+      // Lecture d'UN profil si on connaît son code ; la liste complète est réservée à l'enseignant
+      allow get: if true;
+      allow list: if estProf();
+      allow create, delete: if estProf();
+      // L'étudiant peut seulement mettre à jour ses tests et son objectif
+      allow update: if estProf()
+        || request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['tests', 'objectif', 'majLe']);
+
+      // Carnet d'entraînement
+      match /seances/{seanceId} {
+        allow read: if true;
+        allow create: if exists(/databases/$(database)/documents/etudiants/$(code));
+        allow update, delete: if estProf();
+      }
+    }
+  }
+}

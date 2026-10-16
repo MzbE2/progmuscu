@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17181a">
+  <title>Muscu SUAPS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="demo" class="bandeau-demo cache">Mode démo : données enregistrées uniquement sur cet appareil</div>
+  <header class="top">
+    <div class="marque"><div class="logo">M</div><div class="titre">Muscu SUAPS</div></div>
+    <button id="btn-deco" class="cache small">Changer de profil</button>
+  </header>
+  <main class="wrap" id="app">
+    <div class="vide">Chargement…</div>
+  </main>
+  <div id="barre-minuteur" class="cache" style="position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:var(--bg);padding:10px 16px;z-index:40">
+    <div class="wrap ligne espace" style="padding:0">
+      <div><span class="small">Récupération</span> <span id="minuteur" class="minuteur num">0:00</span></div>
+      <button id="stop-minuteur" style="background:transparent;color:var(--bg);border-color:rgba(255,255,255,.3)">Arrêter</button>
+    </div>
+  </div>
+  <script type="module" src="js/etudiant.js"></script>
+</body>
+</html>
