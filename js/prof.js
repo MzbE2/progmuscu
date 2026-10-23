@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, fmtKg, fmtDate, RESSENTIS } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -140,7 +140,7 @@ function vueEtudiants(c) {
             return `<tr>
               <td><b>${esc(e.nom)}</b></td><td>${esc(e.prenom)}</td><td>${esc(e.groupe)}</td>
               <td><code>${esc(e.code)}</code></td>
-              ${actifs.map(m => { const t = e.tests?.[m.id]; return `<td class="num">${t ? `${fmtKg(t.charge3)} → <b>${fmtKg(t.max)}</b>` : `<span class="muted">—</span>`}</td>`; }).join("")}
+              ${actifs.map(m => { const t = e.tests?.[m.id]; return `<td class="num">${t ? `${fmtChargeCourt(t.charge3, m)} → <b>${fmtChargeCourt(t.max, m)}</b>` : `<span class="muted">—</span>`}</td>`; }).join("")}
               <td>${o ? `${o.icone} ${esc(o.nom)}<br><span class="small muted">${e.objectif.termine ? "Cycle terminé" : `${e.objectif.nbFaites || 0}/${o.seances} séances`}</span>` : `<span class="muted">—</span>`}</td>
               <td class="small">${fmtDate(e.objectif?.derniere)}</td>
               <td><button class="lien" data-voir="${e.code}">Voir</button></td>
@@ -172,7 +172,7 @@ function vueEtudiants(c) {
 
 function exporterCSV(liste) {
   const actifs = machines.filter(m => m.actif !== false);
-  const entete = ["Nom", "Prénom", "Groupe", "Code", ...actifs.flatMap(m => [`${m.nom} 3RM (kg)`, `${m.nom} max estimé (kg)`, `${m.nom} date test`]), "Objectif", "Séances faites", "Dernière séance"];
+  const entete = ["Nom", "Prénom", "Groupe", "Code", ...actifs.flatMap(m => [`${m.nom} 3RM (${uniteDe(m)})`, `${m.nom} max estimé (${uniteDe(m)})`, `${m.nom} date test`]), "Objectif", "Séances faites", "Dernière séance"];
   const rows = liste.map(e => [e.nom, e.prenom, e.groupe, e.code,
     ...actifs.flatMap(m => { const t = e.tests?.[m.id]; return t ? [t.charge3, t.max, fmtDate(t.date)] : ["", "", ""]; }),
     e.objectif ? OBJECTIFS[e.objectif.type]?.nom : "", e.objectif?.nbFaites || "", e.objectif?.derniere ? fmtDate(e.objectif.derniere) : ""]);
@@ -199,8 +199,8 @@ async function ficheEtudiant(code) {
       <h3 style="margin-top:14px">Maxima</h3>
       <table><thead><tr><th>Appareil</th><th>3RM</th><th>Max estimé</th><th>Date</th><th>Saisir un test</th></tr></thead><tbody>
         ${machines.map(m => { const t = e.tests?.[m.id]; return `<tr><td>${esc(m.nom)}</td>
-          <td class="num">${t ? fmtKg(t.charge3) : "—"}</td><td class="num"><b>${t ? fmtKg(t.max) : "—"}</b></td><td class="small">${t ? fmtDate(t.date) : ""}</td>
-          <td><div class="ligne"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="kg" style="width:90px"><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")}
+          <td class="num">${t ? fmtChargeCourt(t.charge3, m) : "—"}</td><td class="num"><b>${t ? fmtChargeCourt(t.max, m) : "—"}</b></td><td class="small">${t ? fmtDate(t.date) : ""}</td>
+          <td><div class="ligne"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="${uniteDe(m)}" style="width:90px"><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")}
       </tbody></table>
       <h3 style="margin-top:18px">Objectif</h3>
       <p>${o ? `${o.icone} <b>${esc(o.nom)}</b> — ${e.objectif.termine ? "cycle terminé" : `${seances.filter(s => s.cycleId === e.objectif.cycleId).length}/${o.seances} séances`} (début ${fmtDate(e.objectif.debut)})` : "Aucun objectif choisi."}</p>
@@ -209,7 +209,7 @@ async function ficheEtudiant(code) {
         ${[...seances].reverse().map(s => (s.lignes?.length ? s.lignes : [null]).map((l, i) => `<tr>
           <td class="small">${i === 0 ? fmtDate(s.date) : ""}</td>
           <td class="small">${i === 0 ? (s.bilan ? "Bilan" : `${OBJECTIFS[s.objectif]?.icone || ""} n°${s.num}`) : ""}</td>
-          <td>${l ? esc(l.machine) : "—"}</td><td class="num">${l ? fmtKg(l.charge) : ""}</td>
+          <td>${l ? esc(l.machine) : "—"}</td><td class="num">${l ? fmtChargeCourt(l.charge, { unite: l.unite }) : ""}</td>
           <td class="num">${l ? `${l.seriesReussies}/${l.seriesPrevues} × ${l.repsPrevues}` : ""}</td>
           <td class="small">${l ? esc(nomRess[l.ressenti] || l.ressenti) : ""}</td></tr>`).join("")
           + (s.commentaire ? `<tr><td></td><td colspan="5" class="small muted">💬 ${esc(s.commentaire)}</td></tr>` : "")).join("")}
@@ -237,7 +237,7 @@ async function ficheEtudiant(code) {
     const champs = { tests };
     if (e.objectif) { const obj = JSON.parse(JSON.stringify(e.objectif)); (obj.ajust ||= {})[m.id] = 0; (obj.statuts ||= {})[m.id] = []; champs.objectif = obj; }
     await DB.majEtudiant(e.code, champs);
-    toast(`Test enregistré : max ${fmtKg(max)}`);
+    toast(`Test enregistré : max ${fmtChargeCourt(max, m)}`);
     ficheEtudiant(code);
   });
 }
@@ -247,29 +247,48 @@ function vueAppareils(c) {
   c.innerHTML = `
     <div class="carte">
       <div class="entete-carte"><h3>Appareils de la salle</h3><button id="btn-ajout">+ Ajouter un appareil</button></div>
-      <p class="small muted">L'incrément est le plus petit saut de charge possible (ex. 2,5 kg = deux disques de 1,25 kg sur une barre).
-      La charge minimale est celle de la barre ou de la machine à vide.</p>
-      <div class="table-scroll"><table>
-        <thead><tr><th>Nom</th><th>Incrément (kg)</th><th>Charge min (kg)</th><th>Consigne de sécurité</th><th>Actif</th><th></th></tr></thead>
+      <p class="small muted"><b>Unité</b> : « lbs » pour une pile de plaques graduée en livres (l'étudiant saisit le chiffre gravé sur la plaque), « kg » pour une barre ou des disques.
+      <b>Pas</b> : le plus petit saut de charge (2,5 kg pour une barre, 5 lbs pour une pile).
+      <b>Min / Max</b> : la plus légère et la plus lourde charge possibles (barre à vide, première et dernière plaque).</p>
+      <p class="small muted"><b>Dossier photos</b> : le nom du dossier déposé sur GitHub dans <code>img/appareils/</code>, contenant
+      <code>appareil.webp</code>, <code>consigne.webp</code> et <code>pile.webp</code>. Laissez vide si l'appareil n'a pas de photos.</p>
+      <div class="table-scroll"><table class="table-appareils">
+        <thead><tr><th>Photo</th><th>Nom</th><th>Unité</th><th>Pas</th><th>Min</th><th>Max</th><th>Dossier photos</th><th>Consigne de sécurité</th><th>Actif</th><th></th></tr></thead>
         <tbody id="tb-app">${machines.map((m, i) => `<tr data-i="${i}">
-          <td><input class="m-nom" value="${esc(m.nom)}"></td>
-          <td style="width:110px"><input class="m-inc" type="number" step="0.25" min="0.25" value="${m.increment}"></td>
-          <td style="width:110px"><input class="m-min" type="number" step="0.5" min="0" value="${m.chargeMin || 0}"></td>
-          <td><input class="m-cons" value="${esc(m.consigne || "")}"></td>
-          <td style="width:60px;text-align:center"><input class="m-actif" type="checkbox" ${m.actif !== false ? "checked" : ""} style="width:auto"></td>
+          <td style="width:56px">${apercu(m)}</td>
+          <td style="min-width:150px"><input class="m-nom" value="${esc(m.nom)}"></td>
+          <td style="width:96px"><select class="m-unite"><option value="kg" ${uniteDe(m) === "kg" ? "selected" : ""}>kg</option><option value="lbs" ${uniteDe(m) === "lbs" ? "selected" : ""}>lbs</option></select></td>
+          <td style="width:92px"><input class="m-inc" type="number" step="0.25" min="0.25" value="${m.increment}"></td>
+          <td style="width:92px"><input class="m-min" type="number" step="0.5" min="0" value="${m.chargeMin || 0}"></td>
+          <td style="width:96px"><input class="m-max" type="number" step="0.5" min="0" value="${m.chargeMax || ""}" placeholder="—"></td>
+          <td style="min-width:170px"><input class="m-dossier" value="${esc(m.dossier || "")}" placeholder="ex. triceps-pressdown"></td>
+          <td style="min-width:180px"><input class="m-cons" value="${esc(m.consigne || "")}"></td>
+          <td style="width:56px;text-align:center"><input class="m-actif" type="checkbox" ${m.actif !== false ? "checked" : ""} style="width:auto"></td>
           <td><button class="lien danger" data-del="${i}" title="Retirer">✕</button></td></tr>`).join("")}
         </tbody></table></div>
       <button class="primaire" id="btn-save" style="margin-top:14px">Enregistrer les appareils</button>
-      <p class="small muted" style="margin-top:8px">Conseil : décochez « Actif » plutôt que de supprimer un appareil déjà testé, pour garder l'historique des étudiants.</p>
+      <p class="small muted" style="margin-top:8px">Conseil : décochez « Actif » plutôt que de supprimer un appareil déjà testé, pour garder l'historique des étudiants.
+      Ne changez pas l'unité d'un appareil déjà testé : les maxima enregistrés seraient lus dans la nouvelle unité.</p>
     </div>`;
+  const dossierPropre = v => v.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   const lire = () => [...c.querySelectorAll("#tb-app tr")].map(tr => {
     const m = machines[+tr.dataset.i];
-    return { ...m, nom: tr.querySelector(".m-nom").value.trim(), increment: +tr.querySelector(".m-inc").value || 2.5,
-      chargeMin: +tr.querySelector(".m-min").value || 0, consigne: tr.querySelector(".m-cons").value.trim(), actif: tr.querySelector(".m-actif").checked };
+    return { ...m, nom: tr.querySelector(".m-nom").value.trim(),
+      unite: tr.querySelector(".m-unite").value,
+      increment: +tr.querySelector(".m-inc").value || 2.5,
+      chargeMin: +tr.querySelector(".m-min").value || 0,
+      chargeMax: +tr.querySelector(".m-max").value || 0,
+      dossier: dossierPropre(tr.querySelector(".m-dossier").value),
+      consigne: tr.querySelector(".m-cons").value.trim(), actif: tr.querySelector(".m-actif").checked };
+  });
+  // Aperçu de la photo dès que le nom du dossier est saisi
+  c.querySelectorAll(".m-dossier").forEach(inp => inp.onchange = () => {
+    const td = inp.closest("tr").querySelector("td");
+    td.innerHTML = apercu({ dossier: dossierPropre(inp.value) });
   });
   c.querySelector("#btn-ajout").onclick = () => {
     machines = lire();
-    machines.push({ id: "m" + Date.now().toString(36), nom: "Nouvel appareil", increment: 5, chargeMin: 5, consigne: "", actif: true });
+    machines.push({ id: "m" + Date.now().toString(36), nom: "Nouvel appareil", unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "", consigne: "", actif: true });
     vueAppareils(c);
   };
   c.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
@@ -280,6 +299,14 @@ function vueAppareils(c) {
     machines = lire().filter(m => m.nom);
     await DB.saveMachines(machines); toast("Appareils enregistrés"); rendre();
   };
+}
+
+// Petite photo de l'appareil, ou un tiret si le dossier n'existe pas (encore) sur GitHub
+function apercu(m) {
+  const url = urlPhoto(m, "appareil");
+  return url
+    ? `<img class="apercu" src="${url}" alt="" onerror="this.outerHTML='<span class=&quot;small muted&quot; title=&quot;Photo introuvable : vérifiez le nom du dossier sur GitHub&quot;>⚠️</span>'">`
+    : `<span class="muted">—</span>`;
 }
 
 // ---------------- QR codes ----------------

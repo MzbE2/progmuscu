@@ -4,7 +4,8 @@
 import * as DB from "./db.js";
 import {
   OBJECTIFS, REPS_TEST, estimer1RM, maxAffiche, prescription, statutLigne,
-  nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode
+  nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode,
+  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, TYPES_PHOTOS
 } from "./programmes.js";
 
 const app = document.getElementById("app");
@@ -120,18 +121,20 @@ function vueMaxima(c) {
       <p class="small">Après un échauffement, augmentez la charge progressivement (3 à 5 min de récupération entre les essais).
       Une charge est <b>validée</b> si vous réussissez <b>3 répétitions</b> propres et que la <b>4ème est un échec</b>.
       Si la 4ème passe, la charge est trop légère : augmentez et recommencez.</p>
-      <p class="small muted">Le max sur 1 répétition est estimé par la formule de Brzycki : 1RM = charge × 36 / (37 − 3), arrondi à l'incrément inférieur de l'appareil.</p>
+      <p class="small muted">Le max sur 1 répétition est estimé par la formule de Brzycki : 1RM = charge × 36 / (37 − 3), arrondi à l'incrément inférieur de l'appareil.
+      Sur les appareils à plaques en livres, saisissez le chiffre en <b>lbs</b> gravé sur la plaque où vous mettez la goupille.</p>
     </div>
     ${machines.map(m => carteMax(m)).join("")}`;
   c.querySelectorAll("[data-tester]").forEach(b => b.onclick = () => { testEnCours = b.dataset.tester; vueMaxima(c); });
   c.querySelectorAll("[data-annuler]").forEach(b => b.onclick = () => { testEnCours = null; vueMaxima(c); });
+  brancherFiches(c);
   const f = c.querySelector("#f-test");
   if (f) {
     const inp = f.querySelector("input"), out = f.querySelector("#estim");
     const m = machines.find(x => x.id === testEnCours);
     const maj = () => {
       const v = parseFloat(String(inp.value).replace(",", "."));
-      out.innerHTML = v > 0 ? `Max estimé : <b>${fmtKg(maxAffiche(v, m.increment))}</b> <span class="muted small">(${fmtKg(Math.round(estimer1RM(v) * 10) / 10)} non arrondi)</span>` : "&nbsp;";
+      out.innerHTML = v > 0 ? `Max estimé : <b>${fmtCharge(maxAffiche(v, m.increment), m)}</b> <span class="muted small">(${fmtChargeCourt(Math.round(estimer1RM(v) * 10) / 10, m)} non arrondi)</span>` : "&nbsp;";
     };
     inp.oninput = maj; inp.focus();
     f.onsubmit = async ev => {
@@ -150,10 +153,10 @@ function carteMax(m) {
   if (testEnCours === m.id) {
     return `
     <div class="carte">
-      <h3>Test 3RM — ${esc(m.nom)}</h3>
+      <div class="entete-appareil">${vignette(m)}<h3>Test 3RM — ${esc(m.nom)}</h3></div>
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
       <form id="f-test">
-        <label>Charge validée pour 3 répétitions (kg)</label>
+        <label>Charge validée pour 3 répétitions (${uniteDe(m)})</label>
         <input type="number" inputmode="decimal" step="${m.increment}" min="${m.chargeMin || 0}" required>
         <p id="estim" style="margin:10px 0">&nbsp;</p>
         <div class="ligne">
@@ -166,15 +169,15 @@ function carteMax(m) {
   return `
     <div class="carte">
       <div class="entete-carte">
-        <h3>${esc(m.nom)}</h3>
+        <div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div>
         <button class="${t ? "" : "primaire"}" data-tester="${m.id}">${t ? "Refaire le test" : "Faire le test"}</button>
       </div>
       ${t ? `
         <div class="grille g2" style="margin-top:10px">
-          <div class="stat"><div class="val num">${fmtKg(t.charge3)}</div><div class="lbl">Charge 3 répétitions</div></div>
-          <div class="stat accent"><div class="val num">${fmtKg(t.max)}</div><div class="lbl">Max estimé (1RM)</div></div>
+          <div class="stat"><div class="val num">${fmtChargeCourt(t.charge3, m)}</div><div class="lbl">Charge 3 répétitions${enKg(t.charge3, m) ? ` · ${enKg(t.charge3, m)}` : ""}</div></div>
+          <div class="stat accent"><div class="val num">${fmtChargeCourt(t.max, m)}</div><div class="lbl">Max estimé (1RM)${enKg(t.max, m) ? ` · ${enKg(t.max, m)}` : ""}</div></div>
         </div>
-        <p class="small muted" style="margin-top:8px">Testé le ${fmtDate(t.date)}${t.historique?.length > 1 ? ` · précédent : ${fmtKg(t.historique[t.historique.length - 2].max)}` : ""}</p>`
+        <p class="small muted" style="margin-top:8px">Testé le ${fmtDate(t.date)}${t.historique?.length > 1 ? ` · précédent : ${fmtCharge(t.historique[t.historique.length - 2].max, m)}` : ""}</p>`
       : `<p class="muted small">Pas encore testé.</p>`}
     </div>`;
 }
@@ -286,13 +289,14 @@ function vueSeance(c) {
         const t = E.tests?.[m.id];
         const testeAuj = t && new Date(t.date).toDateString() === new Date().toDateString();
         const prec = t?.historique?.length > 1 ? t.historique[t.historique.length - 2].max : null;
-        return `<div class="carte"><div class="entete-carte"><h3>${esc(m.nom)}</h3>
+        return `<div class="carte"><div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div>
           ${testeAuj ? `<span class="pastille ok">Testé ✓</span>` : `<button class="primaire" data-retest="${m.id}">Refaire le test</button>`}</div>
-          ${testeAuj && prec != null ? `<p>Max : <b>${fmtKg(prec)}</b> → <b>${fmtKg(t.max)}</b> <span class="pastille ${t.max >= prec ? "ok" : "warn"}">${t.max >= prec ? "+" : ""}${fmtKg(t.max - prec)}</span></p>` : ""}
+          ${testeAuj && prec != null ? `<p>Max : <b>${fmtChargeCourt(prec, m)}</b> → <b>${fmtChargeCourt(t.max, m)}</b> <span class="pastille ${t.max >= prec ? "ok" : "warn"}">${t.max >= prec ? "+" : ""}${fmtChargeCourt(t.max - prec, m)}</span></p>` : ""}
         </div>`;
       }).join("")}
       <button class="primaire plein" id="cloturer">Clôturer le cycle</button>`;
     c.querySelectorAll("[data-retest]").forEach(b => b.onclick = () => { onglet = "maxima"; testEnCours = b.dataset.retest; rendre(); });
+    brancherFiches(c);
     c.querySelector("#cloturer").onclick = async () => {
       await DB.ajouterSeance(E.code, { cycleId: E.objectif.cycleId, objectif: E.objectif.type, num: n, bilan: true, lignes: [] });
       const objectif = { ...E.objectif, termine: true, fin: new Date().toISOString() };
@@ -319,7 +323,7 @@ function vueSeance(c) {
       <p class="small muted">Commencez par 5 à 10 min d'échauffement général (vélo, rameur, mobilité).</p>
     </div>
     ${lignes.map(({ m, p }) => p ? cartePresc(m, p, o) : `
-      <div class="carte"><div class="entete-carte"><h3>${esc(m.nom)}</h3><button data-retest="${m.id}">Faire le test</button></div>
+      <div class="carte"><div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div><button data-retest="${m.id}">Faire le test</button></div>
       <p class="muted small">Faites d'abord le test 3RM pour obtenir votre programme sur cet appareil.</p></div>`).join("")}
     ${avecPresc.length ? `
       <div class="carte">
@@ -330,6 +334,7 @@ function vueSeance(c) {
 
   c.querySelectorAll("[data-retest]").forEach(b => b.onclick = () => { onglet = "maxima"; testEnCours = b.dataset.retest; rendre(); });
   c.querySelectorAll("[data-recup]").forEach(b => b.onclick = () => lancerMinuteur(+b.dataset.recup));
+  brancherFiches(c);
   c.querySelectorAll(".stepper").forEach(st => {
     const span = st.querySelector("span"), max = +st.dataset.max;
     st.querySelectorAll("button").forEach(b => b.onclick = () => {
@@ -344,13 +349,14 @@ function cartePresc(m, p, o) {
   const tours = o.format === "circuit";
   return `
     <div class="carte" data-machine="${m.id}">
-      <div class="entete-carte"><h3>${esc(m.nom)}</h3><span class="pastille">${p.pct} % du max</span></div>
+      <div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div><span class="pastille">${p.pct} % du max</span></div>
       <div class="presc">
         <div class="gros num">${p.series} <small>${tours ? "tours" : "séries"}</small></div>
         <div class="gros num">× ${p.reps} <small>rép.</small></div>
-        <div class="gros num" style="color:var(--accent)">${fmtKg(p.charge).replace(" kg", "")} <small>kg</small></div>
+        <div class="gros num" style="color:var(--accent)">${String(p.charge).replace(".", ",")} <small>${uniteDe(m)}</small></div>
       </div>
-      <p class="echauf">Échauffement : ${p.echauffement.map(e => `<b>${e.reps}</b> × ${fmtKg(e.charge)}`).join(" · ")}</p>
+      ${uniteDe(m) === "lbs" ? `<p class="small muted" style="margin:-4px 0 6px">Goupille sur la plaque <b>${String(p.charge).replace(".", ",")} lbs</b> (${enKg(p.charge, m)})</p>` : ""}
+      <p class="echauf">Échauffement : ${p.echauffement.map(e => `<b>${e.reps}</b> × ${fmtChargeCourt(e.charge, m)}`).join(" · ")}</p>
       <div class="ligne espace" style="margin:6px 0">
         <span class="small">Récupération : <b>${esc(p.recup)}</b></span>
         <button class="small" data-recup="${p.recupSec}">⏱ Lancer la récup</button>
@@ -359,7 +365,7 @@ function cartePresc(m, p, o) {
       <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
       <p class="small"><b>Mon carnet</b></p>
       <div class="grille g2">
-        <div><label>Charge utilisée (kg)</label><input type="number" inputmode="decimal" step="${m.increment}" class="i-charge" value="${p.charge}"></div>
+        <div><label>Charge utilisée (${uniteDe(m)})</label><input type="number" inputmode="decimal" step="${m.increment}" class="i-charge" value="${p.charge}"></div>
         <div><label>${tours ? "Tours" : "Séries"} réussis</label>
           <div class="stepper" data-max="${p.series}"><button type="button" data-d="-1">−</button><span class="num">${p.series}</span><button type="button" data-d="1">+</button></div>
         </div>
@@ -382,7 +388,7 @@ async function validerSeance(c, avecPresc, n) {
   for (const { m } of avecPresc) {
     const card = c.querySelector(`[data-machine="${m.id}"]`);
     const ligne = {
-      machineId: m.id, machine: m.nom,
+      machineId: m.id, machine: m.nom, unite: uniteDe(m),
       chargePrevue: +card.querySelector(".i-chargeprevue").value,
       charge: parseFloat(String(card.querySelector(".i-charge").value).replace(",", ".")) || 0,
       repsPrevues: +card.querySelector(".i-reps").value,
@@ -397,8 +403,8 @@ async function validerSeance(c, avecPresc, n) {
     obj.ajust[m.id] = apres;
     // après un changement de charge, on repart à zéro dans le comptage
     obj.statuts[m.id] = apres !== avant ? [] : hist.slice(-3);
-    if (apres > avant) messages.push(`${m.nom} : +${fmtKg(apres - avant)} la prochaine fois 🚀`);
-    if (apres < avant) messages.push(`${m.nom} : charge allégée de ${fmtKg(avant - apres)}`);
+    if (apres > avant) messages.push(`${m.nom} : +${fmtChargeCourt(apres - avant, m)} la prochaine fois 🚀`);
+    if (apres < avant) messages.push(`${m.nom} : charge allégée de ${fmtChargeCourt(avant - apres, m)}`);
     lignes.push(ligne);
   }
   try {
@@ -430,12 +436,47 @@ function vueHistorique(c) {
         <span class="muted small">${fmtDate(s.date)}</span>
       </div>
       ${s.lignes?.length ? `<div class="table-scroll"><table><thead><tr><th>Appareil</th><th>Charge</th><th>Séries</th><th></th></tr></thead><tbody>
-        ${s.lignes.map(l => `<tr><td>${esc(l.machine)}</td><td class="num">${fmtKg(l.charge)}</td>
+        ${s.lignes.map(l => `<tr><td>${esc(l.machine)}</td><td class="num">${fmtChargeCourt(l.charge, { unite: l.unite })}</td>
           <td class="num">${l.seriesReussies}/${l.seriesPrevues} × ${l.repsPrevues}</td>
           <td><span class="pastille ${nomStatut[l.statut]?.[0] || ""}">${nomStatut[l.statut]?.[1] || ""}</span></td></tr>`).join("")}
       </tbody></table></div>` : ""}
       ${s.commentaire ? `<p class="small muted" style="margin-top:8px">💬 ${esc(s.commentaire)}</p>` : ""}
     </div>`).join("") : `<div class="carte vide">Aucune séance enregistrée pour l'instant.</div>`;
+}
+
+// ---------------- Photos et fiche appareil ----------------
+// Vignette cliquable (photo de l'appareil). Rien n'est affiché si l'appareil n'a pas de dossier photos.
+function vignette(m) {
+  const url = urlPhoto(m, "appareil");
+  if (!url) return "";
+  return `<button class="vignette" data-fiche="${esc(m.id)}" aria-label="Voir la fiche ${esc(m.nom)}">
+    <img src="${url}" alt="" loading="lazy" onerror="this.parentElement.remove()"></button>`;
+}
+
+function brancherFiches(c) {
+  c.querySelectorAll("[data-fiche]").forEach(b => b.onclick = () => ouvrirFiche(b.dataset.fiche));
+}
+
+function ouvrirFiche(id) {
+  const m = machines.find(x => x.id === id);
+  if (!m) return;
+  const d = document.createElement("div");
+  d.className = "modal-fond";
+  d.innerHTML = `
+    <div class="modal fiche-appareil">
+      <div class="entete-carte"><h2>${esc(m.nom)}</h2><button data-fermer aria-label="Fermer">✕</button></div>
+      ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
+      ${uniteDe(m) === "lbs" ? `<p class="small muted">Charges en livres : lisez le chiffre en <b>lbs</b> sur la plaque${m.chargeMin && m.chargeMax ? ` (de ${fmtChargeCourt(m.chargeMin, m)} à ${fmtChargeCourt(m.chargeMax, m)}, par ${fmtChargeCourt(m.increment, m)})` : ""}.</p>` : ""}
+      <div class="fiche-photos">
+        ${TYPES_PHOTOS.map(([type, titre]) => `
+          <figure><img src="${urlPhoto(m, type)}" alt="${esc(titre)} — ${esc(m.nom)}" loading="lazy" onerror="this.parentElement.remove()">
+          <figcaption>${esc(titre)}</figcaption></figure>`).join("")}
+      </div>
+    </div>`;
+  const fermer = () => d.remove();
+  d.querySelector("[data-fermer]").onclick = fermer;
+  d.onclick = ev => { if (ev.target === d) fermer(); };
+  document.body.appendChild(d);
 }
 
 // ---------------- Minuteur de récupération ----------------

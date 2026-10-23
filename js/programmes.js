@@ -27,6 +27,53 @@ export function maxAffiche(charge3RM, increment) {
   return arrondir(estimer1RM(charge3RM), increment, "bas");
 }
 
+// ---------- 1 bis. Unité et charges de l'appareil ----------
+// Chaque appareil a son unité : "kg" (barres, disques) ou "lbs" (piles de plaques en livres).
+// Toutes les charges d'un appareil (tests, programme, carnet) sont exprimées dans SON unité :
+// pour une pile en lbs, l'étudiant lit directement le chiffre gravé sur la plaque.
+// Conversion identique aux étiquettes des piles Matrix (1 lb = 0,45 kg : 50 lbs → 22,5 kg).
+export const LBS_EN_KG = 0.45;
+
+export function uniteDe(machine) {
+  return machine?.unite === "lbs" ? "lbs" : "kg";
+}
+
+// Garde la charge entre la plus petite et la plus grande charge de l'appareil
+export function borner(charge, machine) {
+  const min = Number(machine?.chargeMin) || 0;
+  const max = Number(machine?.chargeMax) || 0;
+  if (charge < min) charge = min;
+  if (max > 0 && charge > max) charge = max;
+  return charge;
+}
+
+// "50 lbs (22,5 kg)" pour une pile en livres, "52,5 kg" sinon
+export function fmtCharge(v, machine) {
+  const n = Math.round(Number(v) * 100) / 100;
+  if (uniteDe(machine) !== "lbs") return fmtKg(n);
+  return `${String(n).replace(".", ",")} lbs (${fmtKg(Math.round(n * LBS_EN_KG * 10) / 10)})`;
+}
+// Version courte, sans conversion : "50 lbs" ou "52,5 kg"
+export function fmtChargeCourt(v, machine) {
+  return String(Math.round(Number(v) * 100) / 100).replace(".", ",") + " " + uniteDe(machine);
+}
+// Équivalent en kg seul, ou "" pour un appareil déjà en kg : "22,5 kg"
+export function enKg(v, machine) {
+  return uniteDe(machine) === "lbs" ? fmtKg(Math.round(Number(v) * LBS_EN_KG * 10) / 10) : "";
+}
+
+// Photos : déposées sur GitHub dans img/appareils/<dossier>/
+// appareil.webp (photo de l'appareil), consigne.webp (pictogramme), pile.webp (pile de charges)
+export const TYPES_PHOTOS = [
+  ["appareil", "L'appareil"],
+  ["consigne", "La consigne"],
+  ["pile", "Les charges"]
+];
+export function urlPhoto(machine, type) {
+  const d = String(machine?.dossier || "").trim();
+  return d ? `img/appareils/${encodeURIComponent(d)}/${type}.webp` : "";
+}
+
 // ---------- 2. Les objectifs (repris du guide + référentiels EPS) ----------
 // pct = [début de cycle, fin de cycle] en % du max estimé
 // reps = [fin de cycle, début de cycle] → on commence plus léger avec plus de répétitions
@@ -115,9 +162,7 @@ export function prescription(objectifId, numSeance, max1RM, machine, ajustKg = 0
   const reps = Math.round(o.reps[1] - (o.reps[1] - o.reps[0]) * t);
   const series = t < 0.34 ? o.series[0] : o.series[1];
   const inc = Number(machine.increment) || 2.5;
-  const min = Number(machine.chargeMin) || 0;
-  let charge = arrondir(max1RM * pct / 100 + ajustKg, inc);
-  if (charge < min) charge = min;
+  const charge = borner(arrondir(max1RM * pct / 100 + ajustKg, inc), machine);
   return {
     bilan: false, series, reps, pct: Math.round(pct), charge,
     recup: o.recup, recupSec: o.recupSec, consigne: o.consigne,
@@ -128,11 +173,10 @@ export function prescription(objectifId, numSeance, max1RM, machine, ajustKg = 0
 // Échauffement progressif
 export function echauffement(objectifId, max1RM, machine) {
   const inc = Number(machine.increment) || 2.5;
-  const min = Number(machine.chargeMin) || 0;
   const paliers = [[10, 40], [6, 55]];
   if (["force", "hypertrophie", "puissance", "sculpter"].includes(objectifId)) paliers.push([3, 70]);
   if (objectifId === "force") paliers.push([1, 80]);
-  return paliers.map(([r, p]) => ({ reps: r, charge: Math.max(min, arrondir(max1RM * p / 100, inc)) }));
+  return paliers.map(([r, p]) => ({ reps: r, charge: borner(arrondir(max1RM * p / 100, inc), machine) }));
 }
 
 // ---------- 4. Régulation de la charge ----------
@@ -143,7 +187,7 @@ export function statutLigne(ligne, seriesPrevues) {
   return "ok"; // une seule série manquée = on maintient la charge
 }
 
-// Calcule le nouvel ajustement (en kg) à partir de l'historique de l'appareil
+// Calcule le nouvel ajustement (dans l'unité de l'appareil) à partir de l'historique de l'appareil
 // Règle : 2 séances "facile" consécutives → +1 incrément ; 1 "échec" → −1 incrément
 export function nouvelAjustement(ajustActuel, historiqueStatuts, increment) {
   const inc = Number(increment) || 2.5;
@@ -165,7 +209,10 @@ export const MACHINES_DEFAUT = [
   { id: "squat", nom: "Squat", increment: 2.5, chargeMin: 20, actif: true,
     consigne: "Barres de sécurité réglées sous la hauteur de descente. Dos neutre, genoux dans l'axe des pieds." },
   { id: "dc", nom: "Développé couché", increment: 2.5, chargeMin: 20, actif: true,
-    consigne: "Pareur obligatoire. Pieds au sol, omoplates serrées, barre au niveau des pectoraux." }
+    consigne: "Pareur obligatoire. Pieds au sol, omoplates serrées, barre au niveau des pectoraux." },
+  { id: "triceps-pressdown", nom: "Triceps pressdown", unite: "lbs",
+    increment: 5, chargeMin: 5, chargeMax: 100, dossier: "triceps-pressdown", actif: true,
+    consigne: "Coudes collés au corps, seuls les avant-bras bougent. Écartez la corde en bas du mouvement." }
 ];
 
 export function genererCode(longueur = 6) {
