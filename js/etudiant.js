@@ -5,7 +5,7 @@ import * as DB from "./db.js";
 import {
   OBJECTIFS, REPS_TEST, REPS_MIN, REPS_MAX, erreurReps, repsDuTest, estimer1RM, maxAffiche, prescription, statutLigne,
   nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode,
-  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, TYPES_PHOTOS, definirPhotos
+  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos
 } from "./programmes.js";
 
 const app = document.getElementById("app");
@@ -463,7 +463,7 @@ function vignette(m) {
   const url = urlPhoto(m, "appareil");
   if (!url) return "";
   return `<button class="vignette" data-fiche="${esc(m.id)}" aria-label="Voir la fiche ${esc(m.nom)}">
-    <img src="${url}" alt="" loading="lazy" onerror="this.parentElement.remove()"></button>`;
+    <img ${attrsPhoto(m, "appareil")} alt="" loading="lazy"></button>`;
 }
 
 function brancherFiches(c) {
@@ -483,7 +483,7 @@ function ouvrirFiche(id) {
       ${uniteDe(m) === "lbs" ? `<p class="small muted">Charges en livres : lisez le chiffre en <b>lbs</b> sur la plaque${m.chargeMin && m.chargeMax ? ` (de ${fmtChargeCourt(m.chargeMin, m)} à ${fmtChargeCourt(m.chargeMax, m)}, par ${fmtChargeCourt(m.increment, m)})` : ""}.</p>` : ""}
       <div class="fiche-photos">
         ${TYPES_PHOTOS.filter(([type]) => urlPhoto(m, type)).map(([type, titre]) => `
-          <figure><img src="${urlPhoto(m, type)}" alt="${esc(titre)} — ${esc(m.nom)}" loading="lazy" onerror="this.parentElement.remove()">
+          <figure><img ${attrsPhoto(m, type)} alt="${esc(titre)} — ${esc(m.nom)}" loading="lazy">
           <figcaption>${esc(titre)}</figcaption></figure>`).join("")}
       </div>
     </div>`;

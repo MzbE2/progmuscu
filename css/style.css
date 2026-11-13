@@ -209,3 +209,7 @@ tbody tr:hover { background: var(--surface-2); }
   font-size: 26px; cursor: pointer; overflow: hidden; margin: 0; }
 .photo-bouton img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-bouton:has(img) { border-style: solid; }
+
+.badge-catalogue { display: none; color: var(--accent); }
+.photo-case.du-catalogue .badge-catalogue { display: inline; }
+.photo-case.du-catalogue .lien.danger { display: none; }

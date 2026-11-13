@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, TYPES_PHOTOS, definirPhotos, photosDe, CATALOGUE } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos, photosDe, CATALOGUE } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -251,8 +251,8 @@ function vueAppareils(c) {
   c.innerHTML = `
     <div class="carte">
       <h3>📷 Photos des appareils</h3>
-      <p class="small muted">À la salle, ouvrez cette page sur votre téléphone et touchez une case pour <b>prendre la photo</b> (ou en choisir une dans la galerie).
-      Elle est enregistrée tout de suite et visible par les étudiants. Touchez à nouveau une photo pour la remplacer.</p>
+      <p class="small muted">Les <b>photos du catalogue</b> (marquées 📚) sont utilisées en priorité. Pour les cases vides 📷, prenez la photo à la salle avec votre téléphone
+      (ou choisissez-en une dans la galerie) : elle est enregistrée tout de suite et visible par les étudiants.</p>
       <div class="photos-appareils">
         ${machines.map(m => `<div class="photo-appareil">
           <b>${esc(m.nom)}</b>
@@ -260,10 +260,11 @@ function vueAppareils(c) {
             const url = urlPhoto(m, type), prise = !!photosDe(m.id)[type];
             return `<div class="photo-case">
               <label class="photo-bouton" title="${esc(titre)}">
-                ${url ? `<img src="${url}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📷'}))">` : `<span>📷</span>`}
+                ${url ? `<img ${attrsPhoto(m, type, "camera")} alt="" onload="this.closest('.photo-case').classList.toggle('du-catalogue', !this.src.startsWith('data:'))">` : `<span>📷</span>`}
                 <input type="file" accept="image/*" data-photo="${esc(m.id)}" data-type="${type}" hidden>
               </label>
               <span class="small muted">${esc(titre)}</span>
+              <span class="badge-catalogue small">📚 catalogue</span>
               ${prise ? `<button class="lien danger small" data-suppr-photo="${esc(m.id)}" data-type="${type}">Retirer</button>` : ""}
             </div>`;
           }).join("")}</div>
@@ -401,7 +402,7 @@ async function compresserPhoto(fichier, cote = 900) {
 function apercu(m) {
   const url = urlPhoto(m, "appareil");
   return url
-    ? `<img class="apercu" src="${url}" alt="" onerror="this.outerHTML='<span class=&quot;small muted&quot; title=&quot;Photo introuvable : vérifiez le nom du dossier sur GitHub&quot;>⚠️</span>'">`
+    ? `<img class="apercu" ${attrsPhoto(m, "appareil", "camera")} alt="">`
     : `<span class="muted">—</span>`;
 }
 

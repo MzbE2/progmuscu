@@ -96,11 +96,11 @@ export function enKg(v, machine) {
   return uniteDe(machine) === "lbs" ? fmtKg(Math.round(Number(v) * LBS_EN_KG * 10) / 10) : "";
 }
 
-// Photos : deux sources possibles
-//  1. prises depuis l'espace enseignant (bouton 📷, sur téléphone) → stockées dans Firestore
-//  2. déposées sur GitHub dans img/appareils/<dossier>/ :
+// Photos : deux sources possibles, dans cet ordre de priorité
+//  1. photos du catalogue, livrées avec l'appli dans img/appareils/<dossier>/ :
 //     appareil.webp (photo de l'appareil), consigne.webp (pictogramme), pile.webp (pile de charges)
-// Une photo prise depuis l'appli est prioritaire sur celle du dossier GitHub.
+//  2. sinon, photo prise depuis l'espace enseignant (bouton 📷, sur téléphone), stockée dans Firestore
+// Le navigateur essaie d'abord la photo du catalogue ; si elle n'existe pas, il bascule sur la photo prise.
 export const TYPES_PHOTOS = [
   ["appareil", "L'appareil"],
   ["consigne", "La consigne"],
@@ -110,12 +110,30 @@ let PHOTOS = {}; // { idAppareil: { appareil: "data:image/jpeg;base64,…", cons
 export function definirPhotos(map) { PHOTOS = map || {}; }
 export function photosDe(machineId) { return PHOTOS[machineId] || {}; }
 
-export function urlPhoto(machine, type) {
-  const prise = PHOTOS[machine?.id]?.[type];
-  if (prise) return prise;
+export function urlCatalogue(machine, type) {
   const d = String(machine?.dossier || "").trim();
   return d ? `img/appareils/${encodeURIComponent(d)}/${type}.webp` : "";
 }
+
+// Première photo à essayer (catalogue, sinon photo prise), "" s'il n'y en a aucune
+export function urlPhoto(machine, type) {
+  return urlCatalogue(machine, type) || PHOTOS[machine?.id]?.[type] || "";
+}
+
+// Attributs d'une balise <img> avec bascule automatique : catalogue → photo prise → rien.
+// absent : ce qu'on fait s'il n'y a aucune photo : "retirer" (enlève le bloc parent) ou "camera" (affiche 📷)
+export function attrsPhoto(machine, type, absent = "retirer") {
+  const url = urlPhoto(machine, type);
+  return `src="${url}" data-m="${String(machine?.id || "").replace(/"/g, "")}" data-t="${type}" data-absent="${absent}" onerror="photoSuivante(this)"`;
+}
+function photoSuivante(img) {
+  const prise = PHOTOS[img.dataset.m]?.[img.dataset.t];
+  if (prise && !img.src.startsWith("data:")) { img.src = prise; return; }
+  img.onerror = null;
+  if (img.dataset.absent === "camera") img.replaceWith(Object.assign(document.createElement("span"), { textContent: "📷" }));
+  else img.parentElement?.remove();
+}
+if (typeof window !== "undefined") window.photoSuivante = photoSuivante;
 
 // ---------- 2. Les objectifs (repris du guide + référentiels EPS) ----------
 // pct = [début de cycle, fin de cycle] en % du max estimé
