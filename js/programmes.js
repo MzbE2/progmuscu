@@ -3,15 +3,44 @@
 //  Vous pouvez modifier les valeurs des OBJECTIFS ci-dessous sans risque.
 // =====================================================================
 
-// ---------- 1. Estimation du 1RM à partir du 3RM ----------
+// ---------- 1. Estimation du 1RM à partir d'un test de 3 à 10 répétitions ----------
 // Formule de Brzycki (1993) : 1RM = charge × 36 / (37 − répétitions)
-// Pour 3 répétitions : 1RM = charge × 36/34 ≈ charge × 1,059
-export const REPS_TEST = 3;
+//   3 rép. → × 1,059   5 rép. → × 1,125   8 rép. → × 1,241   10 rép. → × 1,333
+//
+// Pourquoi 10 répétitions au maximum ?
+//  - Au-delà, la série mesure surtout l'ENDURANCE (résistance à la fatigue), très variable
+//    d'une personne à l'autre : deux étudiants de même force peuvent faire 12 ou 20 répétitions.
+//  - Les formules (Brzycki, Epley, Lander…) donnent des résultats proches jusqu'à 10 rép.,
+//    puis s'écartent de plus de 10 % : aucune n'est fiable dans cette zone.
+//  - Brzycki a été validée jusqu'à 10 répétitions ; ensuite le dénominateur (37 − rép.)
+//    devient petit et le résultat s'envole.
+//  - La technique se dégrade en fin de série longue.
+export const REPS_MIN = 3;
+export const REPS_MAX = 10;
+export const REPS_TEST = 3; // valeur par défaut (et pour les anciens tests enregistrés sans répétitions)
 
-export function estimer1RM(charge3RM, reps = REPS_TEST) {
-  const c = Number(charge3RM);
-  if (!c || c <= 0) return 0;
-  return c * 36 / (37 - reps);
+export const MSG_REPS_TROP = "Plus de 10 répétitions : l'estimation du max n'est pas fiable (on mesure surtout l'endurance). Reposez-vous 3 à 5 min, ajoutez de la charge et refaites le test.";
+export const MSG_REPS_PEU = "Faites au moins 3 répétitions : un test plus lourd n'est pas nécessaire et augmente le risque.";
+
+export function repsValides(reps) {
+  const r = Number(reps);
+  return Number.isInteger(r) && r >= REPS_MIN && r <= REPS_MAX;
+}
+
+// Renvoie le message d'erreur, ou "" si le nombre de répétitions est correct
+export function erreurReps(reps) {
+  const r = Number(reps);
+  if (!Number.isFinite(r) || r <= 0) return "";
+  if (r > REPS_MAX) return MSG_REPS_TROP;
+  if (r < REPS_MIN) return MSG_REPS_PEU;
+  if (!Number.isInteger(r)) return "Saisissez un nombre entier de répétitions.";
+  return "";
+}
+
+export function estimer1RM(charge, reps = REPS_TEST) {
+  const c = Number(charge);
+  if (!c || c <= 0 || !repsValides(reps)) return 0;
+  return c * 36 / (37 - Number(reps));
 }
 
 // Arrondi à l'incrément de l'appareil
@@ -23,8 +52,13 @@ export function arrondir(valeur, increment = 2.5, mode = "proche") {
 }
 
 // Max affiché : arrondi INFÉRIEUR à l'incrément (estimation prudente)
-export function maxAffiche(charge3RM, increment) {
-  return arrondir(estimer1RM(charge3RM), increment, "bas");
+export function maxAffiche(charge, increment, reps = REPS_TEST) {
+  return arrondir(estimer1RM(charge, reps), increment, "bas");
+}
+
+// Nombre de répétitions d'un test enregistré (les anciens tests étaient tous à 3)
+export function repsDuTest(t) {
+  return Number(t?.reps) || REPS_TEST;
 }
 
 // ---------- 1 bis. Unité et charges de l'appareil ----------
@@ -154,7 +188,7 @@ export function prescription(objectifId, numSeance, max1RM, machine, ajustKg = 0
   if (!o) return null;
   const total = o.seances;
   if (numSeance >= total) {
-    return { bilan: true, texte: "Séance bilan : refaites le test 3RM sur cet appareil pour mesurer vos progrès." };
+    return { bilan: true, texte: "Séance bilan : refaites le test sur cet appareil pour mesurer vos progrès." };
   }
   // Phase de 0 (début) à 1 (fin du cycle, hors séance bilan)
   const t = total > 2 ? (numSeance - 1) / (total - 2) : 0;

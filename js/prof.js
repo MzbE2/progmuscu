@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -133,14 +133,14 @@ function vueEtudiants(c) {
       <div class="table-scroll" style="margin-top:12px">
         ${liste.length ? `<table>
           <thead><tr><th>Nom</th><th>Prénom</th><th>Groupe</th><th>Code</th>
-            ${actifs.map(m => `<th>${esc(m.nom)}<br><span style="text-transform:none">3RM → max</span></th>`).join("")}
+            ${actifs.map(m => `<th>${esc(m.nom)}<br><span style="text-transform:none">test → max</span></th>`).join("")}
             <th>Objectif</th><th>Dernière séance</th><th></th></tr></thead>
           <tbody>${liste.map(e => {
             const o = e.objectif && OBJECTIFS[e.objectif.type];
             return `<tr>
               <td><b>${esc(e.nom)}</b></td><td>${esc(e.prenom)}</td><td>${esc(e.groupe)}</td>
               <td><code>${esc(e.code)}</code></td>
-              ${actifs.map(m => { const t = e.tests?.[m.id]; return `<td class="num">${t ? `${fmtChargeCourt(t.charge3, m)} → <b>${fmtChargeCourt(t.max, m)}</b>` : `<span class="muted">—</span>`}</td>`; }).join("")}
+              ${actifs.map(m => { const t = e.tests?.[m.id]; return `<td class="num">${t ? `${repsDuTest(t)} × ${fmtChargeCourt(t.charge3, m)} → <b>${fmtChargeCourt(t.max, m)}</b>` : `<span class="muted">—</span>`}</td>`; }).join("")}
               <td>${o ? `${o.icone} ${esc(o.nom)}<br><span class="small muted">${e.objectif.termine ? "Cycle terminé" : `${e.objectif.nbFaites || 0}/${o.seances} séances`}</span>` : `<span class="muted">—</span>`}</td>
               <td class="small">${fmtDate(e.objectif?.derniere)}</td>
               <td><button class="lien" data-voir="${e.code}">Voir</button></td>
@@ -172,9 +172,9 @@ function vueEtudiants(c) {
 
 function exporterCSV(liste) {
   const actifs = machines.filter(m => m.actif !== false);
-  const entete = ["Nom", "Prénom", "Groupe", "Code", ...actifs.flatMap(m => [`${m.nom} 3RM (${uniteDe(m)})`, `${m.nom} max estimé (${uniteDe(m)})`, `${m.nom} date test`]), "Objectif", "Séances faites", "Dernière séance"];
+  const entete = ["Nom", "Prénom", "Groupe", "Code", ...actifs.flatMap(m => [`${m.nom} charge test (${uniteDe(m)})`, `${m.nom} rép. test`, `${m.nom} max estimé (${uniteDe(m)})`, `${m.nom} date test`]), "Objectif", "Séances faites", "Dernière séance"];
   const rows = liste.map(e => [e.nom, e.prenom, e.groupe, e.code,
-    ...actifs.flatMap(m => { const t = e.tests?.[m.id]; return t ? [t.charge3, t.max, fmtDate(t.date)] : ["", "", ""]; }),
+    ...actifs.flatMap(m => { const t = e.tests?.[m.id]; return t ? [t.charge3, repsDuTest(t), t.max, fmtDate(t.date)] : ["", "", "", ""]; }),
     e.objectif ? OBJECTIFS[e.objectif.type]?.nom : "", e.objectif?.nbFaites || "", e.objectif?.derniere ? fmtDate(e.objectif.derniere) : ""]);
   const csv = [entete, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""').replace(/^(\d+)\.(\d+)$/, "$1,$2")}"`).join(";")).join("\r\n");
   const a = document.createElement("a");
@@ -197,10 +197,10 @@ async function ficheEtudiant(code) {
       </div>
       <div id="qr-fiche" style="margin:10px 0"></div>
       <h3 style="margin-top:14px">Maxima</h3>
-      <table><thead><tr><th>Appareil</th><th>3RM</th><th>Max estimé</th><th>Date</th><th>Saisir un test</th></tr></thead><tbody>
+      <table><thead><tr><th>Appareil</th><th>Test (rép. × charge)</th><th>Max estimé</th><th>Date</th><th>Saisir un test</th></tr></thead><tbody>
         ${machines.map(m => { const t = e.tests?.[m.id]; return `<tr><td>${esc(m.nom)}</td>
-          <td class="num">${t ? fmtChargeCourt(t.charge3, m) : "—"}</td><td class="num"><b>${t ? fmtChargeCourt(t.max, m) : "—"}</b></td><td class="small">${t ? fmtDate(t.date) : ""}</td>
-          <td><div class="ligne"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="${uniteDe(m)}" style="width:90px"><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")}
+          <td class="num">${t ? `${repsDuTest(t)} × ${fmtChargeCourt(t.charge3, m)}` : "—"}</td><td class="num"><b>${t ? fmtChargeCourt(t.max, m) : "—"}</b></td><td class="small">${t ? fmtDate(t.date) : ""}</td>
+          <td><div class="ligne" style="flex-wrap:nowrap;gap:4px"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="${uniteDe(m)}" style="width:90px"><span class="small">×</span><input type="number" step="1" min="${REPS_MIN}" max="${REPS_MAX}" value="${REPS_TEST}" data-test-reps="${m.id}" title="Répétitions (${REPS_MIN} à ${REPS_MAX})" style="width:60px"><span class="small">rép.</span><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")}
       </tbody></table>
       <h3 style="margin-top:18px">Objectif</h3>
       <p>${o ? `${o.icone} <b>${esc(o.nom)}</b> — ${e.objectif.termine ? "cycle terminé" : `${seances.filter(s => s.cycleId === e.objectif.cycleId).length}/${o.seances} séances`} (début ${fmtDate(e.objectif.debut)})` : "Aucun objectif choisi."}</p>
@@ -230,10 +230,13 @@ async function ficheEtudiant(code) {
   modal.querySelectorAll("[data-test]").forEach(b => b.onclick = async () => {
     const m = machines.find(x => x.id === b.dataset.test);
     const v = parseFloat(String(modal.querySelector(`[data-test-input="${m.id}"]`).value).replace(",", "."));
+    const reps = Number(modal.querySelector(`[data-test-reps="${m.id}"]`).value);
     if (!(v > 0)) return;
-    const max = maxAffiche(v, m.increment), date = new Date().toISOString();
+    const err = erreurReps(reps);
+    if (err) return toast(err);
+    const max = maxAffiche(v, m.increment, reps), date = new Date().toISOString();
     const ancien = e.tests?.[m.id];
-    const tests = { ...(e.tests || {}), [m.id]: { charge3: v, max, date, historique: [...(ancien?.historique || []), { date, charge3: v, max }] } };
+    const tests = { ...(e.tests || {}), [m.id]: { charge3: v, reps, max, date, historique: [...(ancien?.historique || []), { date, charge3: v, reps, max }] } };
     const champs = { tests };
     if (e.objectif) { const obj = JSON.parse(JSON.stringify(e.objectif)); (obj.ajust ||= {})[m.id] = 0; (obj.statuts ||= {})[m.id] = []; champs.objectif = obj; }
     await DB.majEtudiant(e.code, champs);
@@ -341,7 +344,7 @@ function vueProgrammes(c) {
     <div class="carte">
       <h3>Référentiel des objectifs</h3>
       <p class="small muted">Valeurs modifiables dans <code>js/programmes.js</code>. La charge et les répétitions évoluent linéairement du début à la fin du cycle ;
-      la dernière séance est un re-test 3RM. Régulation automatique : 2 séances « faciles » de suite → +1 incrément ; un échec → −1 incrément.</p>
+      la dernière séance est un re-test (3 à 10 répétitions). Régulation automatique : 2 séances « faciles » de suite → +1 incrément ; un échec → −1 incrément.</p>
       <div class="table-scroll"><table>
         <thead><tr><th>Objectif</th><th>Séances</th><th>Séries</th><th>Rép. (début → fin)</th><th>% du max (début → fin)</th><th>Récup.</th><th>Format</th></tr></thead>
         <tbody>${Object.values(OBJECTIFS).map(o => `<tr>
@@ -353,8 +356,18 @@ function vueProgrammes(c) {
     </div>
     <div class="carte">
       <h3>Estimation du max (formule de Brzycki)</h3>
-      <p>1RM = charge 3RM × 36 / 34 ≈ charge × 1,059, arrondi à l'incrément inférieur de l'appareil.</p>
-      <div class="table-scroll"><table><thead><tr><th>3RM</th>${[20, 30, 40, 50, 60, 70, 80, 90, 100, 120].map(v => `<th class="num">${v} kg</th>`).join("")}</tr></thead>
-      <tbody><tr><td><b>Max estimé</b></td>${[20, 30, 40, 50, 60, 70, 80, 90, 100, 120].map(v => `<td class="num">${fmtKg(maxAffiche(v, 2.5))}</td>`).join("")}</tr></tbody></table></div>
+      <p>L'étudiant teste une charge qu'il soulève proprement <b>entre ${REPS_MIN} et ${REPS_MAX} fois</b>.
+      1RM = charge × 36 / (37 − répétitions), arrondi à l'incrément inférieur de l'appareil.</p>
+      <div class="table-scroll"><table><thead><tr><th>Charge du test</th>${[20, 30, 40, 50, 60, 80, 100].map(v => `<th class="num">${v} kg</th>`).join("")}</tr></thead>
+      <tbody>${[3, 5, 8, 10].map(r => `<tr><td><b>${r} rép.</b> <span class="small muted">(× ${(36 / (37 - r)).toFixed(3).replace(".", ",")})</span></td>${[20, 30, 40, 50, 60, 80, 100].map(v => `<td class="num">${fmtKg(maxAffiche(v, 2.5, r))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <h3 style="margin-top:14px">Pourquoi pas plus de ${REPS_MAX} répétitions ?</h3>
+      <p class="small">Au-delà de ${REPS_MAX} répétitions, l'estimation <b>n'est plus fiable</b> et l'appli refuse la saisie :</p>
+      <ul class="small">
+        <li><b>L'endurance prend le dessus sur la force</b> : une série longue mesure surtout la résistance à la fatigue, très variable d'une personne à l'autre. Deux étudiants de même force peuvent faire 12 ou 20 répétitions avec la même charge.</li>
+        <li><b>Les formules divergent</b> : jusqu'à 10 répétitions, Brzycki, Epley, Lander… donnent des résultats proches ; au-delà, l'écart dépasse souvent 10 %.</li>
+        <li><b>Brzycki a été validée jusqu'à 10 répétitions</b> (Brzycki, 1993) ; ensuite le dénominateur (37 − rép.) devient petit et le résultat s'envole.</li>
+        <li><b>La technique se dégrade</b> en fin de série longue : les dernières répétitions sont moins représentatives.</li>
+      </ul>
+      <p class="small muted">Conseil : si l'étudiant dépasse 10 répétitions, la charge est trop légère. Il se repose 3 à 5 min, ajoute de la charge et refait le test. Avec des débutants, visez 5 à 8 répétitions.</p>
     </div>`;
 }

@@ -3,7 +3,7 @@
 // =====================================================================
 import * as DB from "./db.js";
 import {
-  OBJECTIFS, REPS_TEST, estimer1RM, maxAffiche, prescription, statutLigne,
+  OBJECTIFS, REPS_TEST, REPS_MIN, REPS_MAX, erreurReps, repsDuTest, estimer1RM, maxAffiche, prescription, statutLigne,
   nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode,
   uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, TYPES_PHOTOS
 } from "./programmes.js";
@@ -118,10 +118,12 @@ function vueMaxima(c) {
   c.innerHTML = `
     <div class="carte">
       <h3>Le protocole du test</h3>
-      <p class="small">Après un échauffement, augmentez la charge progressivement (3 à 5 min de récupération entre les essais).
-      Une charge est <b>validée</b> si vous réussissez <b>3 répétitions</b> propres et que la <b>4ème est un échec</b>.
-      Si la 4ème passe, la charge est trop légère : augmentez et recommencez.</p>
-      <p class="small muted">Le max sur 1 répétition est estimé par la formule de Brzycki : 1RM = charge × 36 / (37 − 3), arrondi à l'incrément inférieur de l'appareil.
+      <p class="small">Après un échauffement, choisissez une charge que vous pensez soulever <b>entre 3 et 10 fois</b>.
+      Faites le plus de répétitions <b>propres</b> possible, puis notez la charge et le nombre de répétitions réussies.
+      Débutant·e ? Visez plutôt <b>5 à 8 répétitions</b>.</p>
+      <p class="small"><b>Plus de 10 répétitions ? Le test n'est pas fiable.</b> Au-delà de 10, on mesure surtout votre endurance, pas votre force,
+      et les formules de calcul du max deviennent imprécises. Reposez-vous 3 à 5 min, ajoutez de la charge et recommencez.</p>
+      <p class="small muted">Le max sur 1 répétition est estimé par la formule de Brzycki : 1RM = charge × 36 / (37 − répétitions), arrondi à l'incrément inférieur de l'appareil.
       Sur les appareils à plaques en livres, saisissez le chiffre en <b>lbs</b> gravé sur la plaque où vous mettez la goupille.</p>
     </div>
     ${machines.map(m => carteMax(m)).join("")}`;
@@ -130,18 +132,23 @@ function vueMaxima(c) {
   brancherFiches(c);
   const f = c.querySelector("#f-test");
   if (f) {
-    const inp = f.querySelector("input"), out = f.querySelector("#estim");
+    const inp = f.querySelector("#t-charge"), inpReps = f.querySelector("#t-reps"), out = f.querySelector("#estim");
     const m = machines.find(x => x.id === testEnCours);
+    const lire = () => ({ v: parseFloat(String(inp.value).replace(",", ".")), r: Number(inpReps.value) });
     const maj = () => {
-      const v = parseFloat(String(inp.value).replace(",", "."));
-      out.innerHTML = v > 0 ? `Max estimé : <b>${fmtCharge(maxAffiche(v, m.increment), m)}</b> <span class="muted small">(${fmtChargeCourt(Math.round(estimer1RM(v) * 10) / 10, m)} non arrondi)</span>` : "&nbsp;";
+      const { v, r } = lire();
+      const err = erreurReps(r);
+      if (err) { out.innerHTML = `<span class="pastille warn" style="white-space:normal">⚠️ ${esc(err)}</span>`; return; }
+      out.innerHTML = v > 0 && r ? `Max estimé : <b>${fmtCharge(maxAffiche(v, m.increment, r), m)}</b> <span class="muted small">(${fmtChargeCourt(Math.round(estimer1RM(v, r) * 10) / 10, m)} non arrondi)</span>` : "&nbsp;";
     };
-    inp.oninput = maj; inp.focus();
+    inp.oninput = maj; inpReps.oninput = maj; inp.focus();
     f.onsubmit = async ev => {
       ev.preventDefault();
-      const charge = parseFloat(String(inp.value).replace(",", "."));
+      const { v: charge, r: reps } = lire();
       if (!(charge > 0)) return;
-      await enregistrerTest(m, charge);
+      const err = erreurReps(reps);
+      if (err) { toast(err); maj(); return; }
+      await enregistrerTest(m, charge, reps);
       testEnCours = null; rendre();
       toast("Test enregistré 💪");
     };
@@ -153,11 +160,13 @@ function carteMax(m) {
   if (testEnCours === m.id) {
     return `
     <div class="carte">
-      <div class="entete-appareil">${vignette(m)}<h3>Test 3RM — ${esc(m.nom)}</h3></div>
+      <div class="entete-appareil">${vignette(m)}<h3>Test de charge — ${esc(m.nom)}</h3></div>
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
       <form id="f-test">
-        <label>Charge validée pour 3 répétitions (${uniteDe(m)})</label>
-        <input type="number" inputmode="decimal" step="${m.increment}" min="${m.chargeMin || 0}" required>
+        <label>Charge utilisée (${uniteDe(m)})</label>
+        <input id="t-charge" type="number" inputmode="decimal" step="${m.increment}" min="${m.chargeMin || 0}" required>
+        <label>Répétitions réussies (${REPS_MIN} à ${REPS_MAX})</label>
+        <input id="t-reps" type="number" inputmode="numeric" step="1" min="1" value="${REPS_TEST}" required>
         <p id="estim" style="margin:10px 0">&nbsp;</p>
         <div class="ligne">
           <button class="primaire">Enregistrer</button>
@@ -174,7 +183,7 @@ function carteMax(m) {
       </div>
       ${t ? `
         <div class="grille g2" style="margin-top:10px">
-          <div class="stat"><div class="val num">${fmtChargeCourt(t.charge3, m)}</div><div class="lbl">Charge 3 répétitions${enKg(t.charge3, m) ? ` · ${enKg(t.charge3, m)}` : ""}</div></div>
+          <div class="stat"><div class="val num">${repsDuTest(t)} × ${fmtChargeCourt(t.charge3, m)}</div><div class="lbl">Test : répétitions × charge${enKg(t.charge3, m) ? ` · ${enKg(t.charge3, m)}` : ""}</div></div>
           <div class="stat accent"><div class="val num">${fmtChargeCourt(t.max, m)}</div><div class="lbl">Max estimé (1RM)${enKg(t.max, m) ? ` · ${enKg(t.max, m)}` : ""}</div></div>
         </div>
         <p class="small muted" style="margin-top:8px">Testé le ${fmtDate(t.date)}${t.historique?.length > 1 ? ` · précédent : ${fmtCharge(t.historique[t.historique.length - 2].max, m)}` : ""}</p>`
@@ -182,11 +191,12 @@ function carteMax(m) {
     </div>`;
 }
 
-async function enregistrerTest(m, charge3) {
-  const max = maxAffiche(charge3, m.increment);
+// charge3 = charge du test (nom conservé pour rester compatible avec les tests déjà enregistrés)
+async function enregistrerTest(m, charge3, reps = REPS_TEST) {
+  const max = maxAffiche(charge3, m.increment, reps);
   const ancien = E.tests?.[m.id];
-  const historique = [...(ancien?.historique || []), { date: new Date().toISOString(), charge3, max }];
-  const tests = { ...(E.tests || {}), [m.id]: { charge3, max, date: new Date().toISOString(), historique } };
+  const historique = [...(ancien?.historique || []), { date: new Date().toISOString(), charge3, reps, max }];
+  const tests = { ...(E.tests || {}), [m.id]: { charge3, reps, max, date: new Date().toISOString(), historique } };
   const champs = { tests };
   // Nouveau max → on remet à zéro la régulation de cet appareil
   if (E.objectif) {
@@ -283,7 +293,7 @@ function vueSeance(c) {
     c.innerHTML = `
       <div class="carte">
         <h2>Séance ${n} / ${o.seances} — Bilan 🏁</h2>
-        <p>Dernière séance du cycle : refaites le test 3RM sur chaque appareil pour mesurer vos progrès.</p>
+        <p>Dernière séance du cycle : refaites le test (3 à 10 répétitions) sur chaque appareil pour mesurer vos progrès.</p>
       </div>
       ${machines.map(m => {
         const t = E.tests?.[m.id];
@@ -324,7 +334,7 @@ function vueSeance(c) {
     </div>
     ${lignes.map(({ m, p }) => p ? cartePresc(m, p, o) : `
       <div class="carte"><div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div><button data-retest="${m.id}">Faire le test</button></div>
-      <p class="muted small">Faites d'abord le test 3RM pour obtenir votre programme sur cet appareil.</p></div>`).join("")}
+      <p class="muted small">Faites d'abord le test de charge pour obtenir votre programme sur cet appareil.</p></div>`).join("")}
     ${avecPresc.length ? `
       <div class="carte">
         <label for="comm">Commentaire (facultatif)</label>

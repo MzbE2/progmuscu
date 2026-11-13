@@ -1,7 +1,7 @@
 # Muscu SUAPS — Guide d'installation
 
 Application web gratuite pour la salle de musculation :
-- **`index.html`** : page étudiant (téléphone). Accès par code ou QR code, test 3RM, objectif, programme, carnet.
+- **`index.html`** : page étudiant (téléphone). Accès par code ou QR code, test de charge (3 à 10 répétitions), objectif, programme, carnet.
 - **`prof.html`** : espace enseignant (PC), avec **connexion par compte Google (Gmail)**. Étudiants, appareils, QR codes, export CSV.
 
 Hébergement : **GitHub Pages** (gratuit). Données : **Firebase Firestore** (offre gratuite Spark).
@@ -85,7 +85,7 @@ Ce que garantissent ces règles :
 1. **Appareils** : vérifiez Squat et Développé couché (incrément 2,5 kg, barre 20 kg) et ajoutez vos machines.
 2. **Étudiants** : ajoutez-les un par un, ou collez une liste `Nom;Prénom;Groupe` copiée depuis un tableur.
 3. **QR codes** : filtrez par groupe, cliquez sur *Imprimer les cartes* et distribuez-les.
-4. L'étudiant scanne sa carte, fait ses tests 3RM, choisit un objectif, puis suit ses séances et remplit son carnet.
+4. L'étudiant scanne sa carte, fait son test de charge (3 à 10 répétitions) sur chaque appareil, choisit un objectif, puis suit ses séances et remplit son carnet.
 5. Suivi : tableau des maxima, fiche détaillée par étudiant, **export CSV** (s'ouvre dans Excel).
 
 ---
@@ -93,9 +93,30 @@ Ce que garantissent ces règles :
 ## Ce que fait l'appli
 
 ### Estimation du max (1RM)
-L'appli utilise la formule de **Brzycki** : `1RM = charge × 36 / (37 − 3)`, soit environ charge × 1,059.
+L'étudiant choisit une charge qu'il soulève proprement **entre 3 et 10 fois**, puis saisit la charge et le nombre de répétitions réussies.
+L'appli estime le max avec la formule de **Brzycki** : `1RM = charge × 36 / (37 − répétitions)`.
+
+| Répétitions | Coefficient | Exemple avec 50 kg |
+|---|---|---|
+| 3 | × 1,059 | 52,9 kg |
+| 5 | × 1,125 | 56,3 kg |
+| 8 | × 1,241 | 62,1 kg |
+| 10 | × 1,333 | 66,7 kg |
+
 Le résultat est arrondi à l'**incrément inférieur** de l'appareil, pour une estimation prudente.
 Exemple : 3 × 50 kg donne 52,9 kg, affiché **52,5 kg**.
+
+#### Pourquoi pas plus de 10 répétitions ?
+Au-delà de 10 répétitions, l'estimation **n'est plus fiable**, et l'appli refuse la saisie :
+- **l'endurance prend le dessus sur la force.** Une série longue mesure surtout la résistance à la fatigue, qui varie beaucoup d'une personne à l'autre. Deux étudiants de même force peuvent faire 12 ou 20 répétitions avec la même charge ;
+- **les formules divergent.** Jusqu'à 10 répétitions, les formules courantes (Brzycki, Epley, Lander…) donnent des résultats proches. Au-delà, l'écart entre elles dépasse souvent 10 %, ce qui montre qu'aucune n'est fiable dans cette zone ;
+- **la formule de Brzycki a été validée jusqu'à 10 répétitions** (Brzycki, 1993). Plus le nombre de répétitions approche de 37, plus le dénominateur `37 − répétitions` est petit et plus le résultat s'envole ;
+- **la technique se dégrade en fin de série longue.** Les dernières répétitions sont souvent mal exécutées, donc moins représentatives.
+
+**Conseil à donner aux étudiants :** si vous dépassez 10 répétitions, la charge est trop légère. Reposez-vous 3 à 5 minutes, ajoutez de la charge et refaites le test.
+Avec des débutants, visez **5 à 8 répétitions** : c'est un bon compromis entre sécurité et précision.
+
+Les tests enregistrés avant cette mise à jour restent valables : ils sont comptés comme des tests à 3 répétitions.
 
 ### Cycles par objectif
 | Objectif | Séances | Séries | Rép. (début → fin) | % du max | Récup. |
@@ -107,14 +128,14 @@ Exemple : 3 × 50 kg donne 52,9 kg, affiché **52,5 kg**.
 | Affiner (circuit) | 10 | 3 → 4 tours | 15 → 12 | 55 → 65 % | 45-60 s |
 | Sculpter & entretenir | 10 | 3 → 4 | 12 → 8 | 65 → 75 % | 1-1 min 30 |
 
-La dernière séance de chaque cycle est une **séance bilan avec re-test 3RM**.
+La dernière séance de chaque cycle est une **séance bilan avec re-test** (3 à 10 répétitions).
 Chaque séance propose aussi un **échauffement progressif** calculé (40 %, 55 %, 70 %…) et un **minuteur de récupération**.
 
 ### Régulation automatique
 À chaque séance, l'étudiant indique ses séries réussies et son ressenti :
 - 2 séances « faciles » de suite (tout réussi, ressenti « facile » ou mieux) : **+1 incrément** ;
 - échec (2 séries manquées ou plus, ou ressenti « impossible ») : **−1 incrément** ;
-- un nouveau test 3RM remet la régulation à zéro.
+- un nouveau test remet la régulation à zéro.
 
 Toutes ces valeurs se modifient dans **`js/programmes.js`**.
 
