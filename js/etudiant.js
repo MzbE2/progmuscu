@@ -163,6 +163,7 @@ function carteMax(m) {
     <div class="carte">
       <div class="entete-appareil">${vignette(m)}<h3>Test de charge — ${esc(m.nom)}</h3></div>
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
+      ${m.info ? `<p class="small"><b>ℹ️ ${esc(m.info)}</b></p>` : ""}
       <form id="f-test">
         <label>Charge utilisée (${uniteDe(m)})</label>
         <input id="t-charge" type="number" inputmode="decimal" step="${m.increment}" min="${m.chargeMin || 0}" required>
@@ -373,6 +374,7 @@ function cartePresc(m, p, o) {
         <button class="small" data-recup="${p.recupSec}">⏱ Lancer la récup</button>
       </div>
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
+      ${m.info ? `<p class="small"><b>ℹ️ ${esc(m.info)}</b></p>` : ""}
       <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
       <p class="small"><b>Mon carnet</b></p>
       <div class="grille g2">
@@ -477,6 +479,7 @@ function ouvrirFiche(id) {
     <div class="modal fiche-appareil">
       <div class="entete-carte"><h2>${esc(m.nom)}</h2><button data-fermer aria-label="Fermer">✕</button></div>
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
+      ${m.info ? `<p class="small"><b>ℹ️ ${esc(m.info)}</b></p>` : ""}
       ${uniteDe(m) === "lbs" ? `<p class="small muted">Charges en livres : lisez le chiffre en <b>lbs</b> sur la plaque${m.chargeMin && m.chargeMax ? ` (de ${fmtChargeCourt(m.chargeMin, m)} à ${fmtChargeCourt(m.chargeMax, m)}, par ${fmtChargeCourt(m.increment, m)})` : ""}.</p>` : ""}
       <div class="fiche-photos">
         ${TYPES_PHOTOS.filter(([type]) => urlPhoto(m, type)).map(([type, titre]) => `

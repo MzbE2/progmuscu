@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, TYPES_PHOTOS, definirPhotos, photosDe } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, TYPES_PHOTOS, definirPhotos, photosDe, CATALOGUE } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -271,7 +271,12 @@ function vueAppareils(c) {
       </div>
     </div>
     <div class="carte">
-      <div class="entete-carte"><h3>Appareils de la salle</h3><button id="btn-ajout">+ Ajouter un appareil</button></div>
+      <div class="entete-carte"><h3>Appareils de la salle</h3>
+        <div class="ligne">
+          <select id="sel-catalogue" style="width:auto"><option value="">📚 Ajouter depuis le catalogue…</option>
+            ${CATALOGUE.map(k => `<option value="${k.id}">${esc(k.nom)} (${esc(k.modele)})</option>`).join("")}</select>
+          <button id="btn-ajout">+ Ajouter un appareil</button>
+        </div></div>
       <p class="small muted"><b>Unité</b> : « lbs » pour une pile de plaques graduée en livres (l'étudiant saisit le chiffre gravé sur la plaque), « kg » pour une barre ou des disques.
       <b>Pas</b> : le plus petit saut de charge (2,5 kg pour une barre, 5 lbs pour une pile).
       <b>Min / Max</b> : la plus légère et la plus lourde charge possibles (barre à vide, première et dernière plaque).</p>
@@ -340,6 +345,26 @@ function vueAppareils(c) {
     definirPhotos({ ...Object.fromEntries(machines.map(x => [x.id, photosDe(x.id)])), [id]: p });
     toast("Photo retirée"); vueAppareils(c);
   });
+  // Catalogue : ajoute l'appareil, ou met à jour celui qui existe déjà (on garde son identifiant → les tests sont conservés)
+  c.querySelector("#sel-catalogue").onchange = async ev => {
+    const k = CATALOGUE.find(x => x.id === ev.target.value);
+    ev.target.value = "";
+    if (!k) return;
+    machines = lire();
+    const { motsCles, modele, ...fiche } = k;
+    const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const existant = machines.find(m => m.id === k.id)
+      || machines.find(m => motsCles.some(mot => norm(m.nom).includes(norm(mot))));
+    if (existant) {
+      if (!(await demander(`Mettre à jour « ${existant.nom} » avec la fiche ${k.modele} (photo, charges, consigne) ? Les tests des étudiants sont conservés.`, "Mettre à jour"))) return;
+      Object.assign(existant, { ...fiche, id: existant.id });
+    } else {
+      machines.push({ ...fiche });
+    }
+    await DB.saveMachines(machines);
+    toast(`${k.nom} : fiche enregistrée ✓`);
+    vueAppareils(c);
+  };
   c.querySelector("#btn-ajout").onclick = () => {
     machines = lire();
     machines.push({ id: "m" + Date.now().toString(36), nom: "Nouvel appareil", unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "", consigne: "", actif: true });

@@ -258,6 +258,17 @@ export const MACHINES_DEFAUT = [
     consigne: "Coudes collés au corps, seuls les avant-bras bougent. Écartez la corde en bas du mouvement." }
 ];
 
+// ---------- Catalogue : appareils pré-remplis (photo, charges, consigne) ----------
+// Bouton « Ajouter depuis le catalogue » dans l'onglet Appareils de l'espace enseignant.
+// motsCles : sert à repérer un appareil déjà créé à la main, pour le mettre à jour au lieu d'en créer un second.
+export const CATALOGUE = [
+  { id: "leg-press-45", nom: "Presse à cuisses 45°", modele: "Matrix Magnum MG-PL70",
+    motsCles: ["leg press", "presse", "legpress"],
+    unite: "kg", increment: 2.5, chargeMin: 75, chargeMax: 490, dossier: "leg-press-45", actif: true,
+    info: "Le chariot vide pèse déjà 75 kg (charge de départ indiquée par Matrix). Saisissez toujours la charge totale : 75 kg + les disques chargés.",
+    consigne: "Dos et bassin collés au dossier. Pieds à plat, largeur du bassin, genoux dans l'axe des pieds. Réglez la butée basse avant de commencer. Déverrouillez le chariot seulement pieds en place, reverrouillez avant de descendre. Ne verrouillez pas les genoux en haut. Chargez et déchargez les disques des deux côtés en même temps." }
+];
+
 export function genererCode(longueur = 6) {
   const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   const arr = new Uint32Array(longueur);
