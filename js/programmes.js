@@ -284,7 +284,21 @@ export const CATALOGUE = [
     motsCles: ["leg press", "presse", "legpress"],
     unite: "kg", increment: 2.5, chargeMin: 75, chargeMax: 490, dossier: "leg-press-45", actif: true,
     info: "Le chariot vide pèse déjà 75 kg (charge de départ indiquée par Matrix). Saisissez toujours la charge totale : 75 kg + les disques chargés.",
-    consigne: "Dos et bassin collés au dossier. Pieds à plat, largeur du bassin, genoux dans l'axe des pieds. Réglez la butée basse avant de commencer. Déverrouillez le chariot seulement pieds en place, reverrouillez avant de descendre. Ne verrouillez pas les genoux en haut. Chargez et déchargez les disques des deux côtés en même temps." }
+    consigne: "Dos et bassin collés au dossier. Pieds à plat, largeur du bassin, genoux dans l'axe des pieds. Réglez la butée basse avant de commencer. Déverrouillez le chariot seulement pieds en place, reverrouillez avant de descendre. Ne verrouillez pas les genoux en haut. Chargez et déchargez les disques des deux côtés en même temps." },
+
+  // Réglages (lbs, pas de 5, 5 à 100) relevés sur la pile de la machine de la salle :
+  // la brochure Matrix annonce une pile de 87,1 kg / 192 lbs pour le MG-942, différente de celle de la salle.
+  { id: "triceps-pressdown", nom: "Triceps pressdown", modele: "Matrix Magnum MG-942",
+    motsCles: ["triceps", "pressdown", "pushdown", "push down"],
+    unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "triceps-pressdown", actif: true,
+    info: "La pile est graduée en livres (lbs) : placez la goupille sur le chiffre indiqué par l'appli (100 lbs ≈ 45 kg).",
+    consigne: "Debout face à la poulie, pieds largeur du bassin, genoux légèrement fléchis, buste un peu penché en avant. Coudes collés au corps : seuls les avant-bras bougent. Écartez la corde en bas du mouvement, remontez lentement sans laisser la pile claquer. Changez la goupille seulement pile au repos." },
+
+  { id: "leg-curl-couche", nom: "Leg curl couché", modele: "Matrix Varsity VY-402",
+    motsCles: ["leg curl", "legcurl", "ischio", "curl jambe"],
+    unite: "kg", increment: 1.25, chargeMin: 10, actif: true, dossier: "leg-curl-couche",
+    info: "Machine à disques : le bras vide équivaut déjà à environ 10 kg (21 lb indiqués par Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés.",
+    consigne: "Allongé sur le ventre, genoux juste au-delà du bord du banc (alignés avec l'axe de rotation), boudin posé au-dessus des talons. Bassin plaqué contre le banc, ne cambrez pas le dos. Montez et descendez lentement, sans à-coup. Chargez et déchargez les disques bras posé en butée basse." }
 ];
 
 export function genererCode(longueur = 6) {

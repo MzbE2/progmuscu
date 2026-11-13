@@ -88,7 +88,8 @@ Ce que garantissent ces règles :
    **Priorité** : la photo du catalogue (marquée 📚) s'affiche en priorité ; votre photo de téléphone n'est utilisée que si le catalogue n'en a pas.
    **Catalogue** : le menu « 📚 Ajouter depuis le catalogue » ajoute un appareil déjà rempli (photo, unité, charges, consigne).
    Si un appareil du même type existe déjà (ex. « Leg press » créé à la main), il est mis à jour sans perdre les tests des étudiants.
-   Disponible : Presse à cuisses 45° (Matrix Magnum MG-PL70, chariot vide = 75 kg). Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
+   Disponible : Presse à cuisses 45° (Matrix Magnum MG-PL70, chariot vide = 75 kg), Triceps pressdown (Matrix Magnum MG-942, pile en lbs),
+   Leg curl couché (Matrix Varsity VY-402, bras vide ≈ 10 kg). Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
 2. **Étudiants** : ajoutez-les un par un, ou collez une liste `Nom;Prénom;Groupe` copiée depuis un tableur.
 3. **QR codes** : filtrez par groupe, cliquez sur *Imprimer les cartes* et distribuez-les.
 4. L'étudiant scanne sa carte, fait son test de charge (3 à 10 répétitions) sur chaque appareil, choisit un objectif, puis suit ses séances et remplit son carnet.
