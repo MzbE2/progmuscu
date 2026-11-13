@@ -139,7 +139,7 @@ function vueEtudiants(c) {
             const nbT = actifs.filter(m => e.tests?.[m.id]).length;
             return `<tr class="ligne-etudiant" data-voir="${e.code}">
               <td><b>${esc(e.nom)}</b></td><td>${esc(e.prenom)}</td><td>${esc(e.groupe)}</td>
-              <td>${o ? `${o.icone} ${esc(o.nom)}<br><span class="small muted">${e.objectif.termine ? "Cycle terminé" : `${e.objectif.nbFaites || 0}/${o.seances} séances`}</span>` : `<span class="muted">—</span>`}</td>
+              <td>${o ? `${o.icone} ${esc(o.nom)}<br><span class="small muted">${e.objectif.termine ? "Cycle terminé" : `${e.objectif.nbFaites || 0}/${o.seances} séances`}${e.objectif.changements?.length ? ` · <span title="Appareil changé par l'étudiant·e">↻ ${e.objectif.changements.length} changement${e.objectif.changements.length > 1 ? "s" : ""}</span>` : ""}</span>` : `<span class="muted">—</span>`}</td>
               <td class="small">${fmtDate(e.objectif?.derniere)}</td>
               <td><button class="small" data-voir="${e.code}">Voir <span class="muted">(${nbT} max)</span></button></td>
             </tr>`;
@@ -203,6 +203,7 @@ async function ficheEtudiant(code) {
       <h3 style="margin-top:18px">Objectif</h3>
       <p>${o ? `${o.icone} <b>${esc(o.nom)}</b> — ${e.objectif.termine ? "cycle terminé" : `${seances.filter(s => s.cycleId === e.objectif.cycleId).length}/${o.seances} séances`} (début ${fmtDate(e.objectif.debut)})` : "Aucun objectif choisi."}</p>
       ${o && e.objectif.selection?.length ? `<p class="small">Appareils du cycle : ${e.objectif.selection.map(id => machines.find(m => m.id === id)).filter(Boolean).map(m => esc(m.nom)).join(" · ")}</p>` : ""}
+      ${o && e.objectif.changements?.length ? `<p class="small"><b>Changements faits par l'étudiant·e :</b><br>${e.objectif.changements.map(ch => `${fmtDate(ch.date)} : ${esc(ch.deNom)} → <b>${esc(ch.versNom)}</b>${ch.raison ? ` <span class="muted">(« ${esc(ch.raison)} »)</span>` : ""}`).join("<br>")}</p>` : ""}
       <h3 style="margin-top:18px">Carnet d'entraînement (${seances.length})</h3>
       ${seances.length ? `<div class="table-scroll"><table><thead><tr><th>Date</th><th>Séance</th><th>Appareil</th><th>Charge</th><th>Séries</th><th>Ressenti</th></tr></thead><tbody>
         ${[...seances].reverse().map(s => (s.lignes?.length ? s.lignes : [null]).map((l, i) => `<tr>

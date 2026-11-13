@@ -375,6 +375,7 @@ async function vueSeance(c) {
 
   c.querySelectorAll("[data-retest]").forEach(b => b.onclick = () => { onglet = "maxima"; testEnCours = b.dataset.retest; rendre(); });
   c.querySelectorAll("[data-recup]").forEach(b => b.onclick = () => lancerMinuteur(+b.dataset.recup));
+  c.querySelectorAll("[data-changer]").forEach(b => b.onclick = () => ouvrirChangement(c, machines.find(x => x.id === b.dataset.changer), selection));
   c.querySelectorAll("[data-remplacer]").forEach(b => b.onclick = () => {
     const orig = machines.find(x => x.id === b.dataset.remplacer);
     const actuel = machines.find(x => x.id === remplacements[orig.id]) || orig;
@@ -400,7 +401,52 @@ async function vueSeance(c) {
 function boutonRemplacer(orig) {
   if (!orig) return "";
   const r = remplacements[orig.id] ? machines.find(x => x.id === remplacements[orig.id]) : null;
-  return `<p class="small" style="margin-top:6px">${r ? `↻ Remplace <b>${esc(orig.nom)}</b> aujourd'hui. ` : ""}<button class="lien small" data-remplacer="${orig.id}">${r ? "Autre appareil" : "Appareil occupé ? Remplacer"}</button></p>`;
+  return `<p class="small ligne" style="margin-top:6px;gap:4px 14px">${r ? `<span>↻ Remplace <b>${esc(orig.nom)}</b> aujourd'hui.</span>` : ""}
+    <button class="lien small" data-remplacer="${orig.id}">${r ? "Autre appareil" : "Appareil occupé ? Remplacer aujourd'hui"}</button>
+    <button class="lien small" data-changer="${orig.id}">Changer pour tout le cycle</button></p>
+    <div class="choix-cycle" data-choix="${orig.id}"></div>`;
+}
+
+// Choix d'un autre appareil pour le reste du cycle (douleur, appareil qui ne convient pas…)
+function ouvrirChangement(c, orig, selection) {
+  const zone = c.querySelector(`[data-choix="${orig.id}"]`);
+  if (zone.innerHTML) { zone.innerHTML = ""; return; }
+  const dejaPris = selection.map(m => m.id);
+  const candidats = machines.filter(m => !dejaPris.includes(m.id));
+  const testesDabord = (a, b) => !!E.tests?.[b.id] - !!E.tests?.[a.id];
+  const memeMuscle = candidats.filter(m => muscleDe(m) === muscleDe(orig)).sort(testesDabord);
+  const autres = candidats.filter(m => muscleDe(m) !== muscleDe(orig));
+  const option = m => `<option value="${m.id}">${esc(m.nom)}${E.tests?.[m.id] ? " ✓ testé" : " (à tester)"}</option>`;
+  zone.innerHTML = `
+    <div class="consigne" style="margin-top:8px">
+      <p class="small"><b>Remplacer « ${esc(orig.nom)} » jusqu'à la fin du cycle</b> (douleur, appareil inadapté…).
+      Choisissez de préférence un appareil qui travaille le même muscle. En cas de douleur, parlez-en aussi à votre enseignant·e.</p>
+      <select class="i-nouveau" style="margin:6px 0">
+        ${memeMuscle.length ? `<optgroup label="Même muscle${muscleDe(orig) ? ` (${esc(MUSCLES[muscleDe(orig)].nom)})` : ""}">${memeMuscle.map(option).join("")}</optgroup>` : ""}
+        ${grouperParZone(autres).map(z => `<optgroup label="${esc(z.nom)}">${[...z.machines].sort(testesDabord).map(option).join("")}</optgroup>`).join("")}
+      </select>
+      <label>Raison (facultatif, visible par l'enseignant·e)</label>
+      <input class="i-raison" placeholder="ex. douleur au genou">
+      <div class="ligne" style="margin-top:8px"><button class="primaire small" data-ok-changer>Valider le changement</button><button class="small" data-annuler-changer>Annuler</button></div>
+    </div>`;
+  zone.querySelector("[data-annuler-changer]").onclick = () => { zone.innerHTML = ""; };
+  zone.querySelector("[data-ok-changer]").onclick = async () => {
+    const nouveau = machines.find(m => m.id === zone.querySelector(".i-nouveau").value);
+    if (!nouveau) return;
+    const objectif = JSON.parse(JSON.stringify(E.objectif));
+    objectif.selection = selection.map(m => m.id === orig.id ? nouveau.id : m.id);
+    objectif.changements = [...(objectif.changements || []), {
+      date: new Date().toISOString(), de: orig.id, deNom: orig.nom, vers: nouveau.id, versNom: nouveau.nom,
+      raison: zone.querySelector(".i-raison").value.trim().slice(0, 200)
+    }];
+    try {
+      await DB.majEtudiant(E.code, { objectif });
+      E.objectif = objectif;
+      delete remplacements[orig.id];
+      vueSeance(c);
+      toast(`${nouveau.nom} remplace ${orig.nom} jusqu'à la fin du cycle`);
+    } catch (e) { console.error(e); toast("Erreur d'enregistrement, réessayez."); }
+  };
 }
 
 function cartePresc(m, p, o, orig) {
