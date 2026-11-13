@@ -247,6 +247,64 @@ async function ficheEtudiant(code) {
 }
 
 // ---------------- Appareils ----------------
+// ---------- Catalogue d'appareils ----------
+// Retrouve l'appareil de la salle qui correspond à une fiche du catalogue (même id, ou nom contenant un mot-clé)
+const normTxt = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+function correspondance(k, liste, dejaPris = new Set()) {
+  return liste.find(m => m.id === k.id && !dejaPris.has(m.id))
+    || liste.find(m => !dejaPris.has(m.id) && !CATALOGUE.some(x => x.id === m.id) && k.motsCles.some(mot => normTxt(m.nom).includes(normTxt(mot))));
+}
+
+function ouvrirCatalogue(c, lire) {
+  machines = lire();
+  const pris = new Set();
+  const lignes = CATALOGUE.map(k => {
+    const m = correspondance(k, machines, pris);
+    if (m) pris.add(m.id);
+    return { k, m };
+  });
+  modal.innerHTML = `
+    <div class="modal-fond"><div class="modal" style="max-width:720px">
+      <div class="entete-carte"><h2>📚 Catalogue d'appareils</h2><button id="fermer">✕</button></div>
+      <p class="small muted">Cochez les appareils de votre salle. Chaque fiche contient la photo, l'unité, le pas, la charge de départ et une consigne de sécurité.
+      Un appareil déjà présent est <b>mis à jour</b> (les tests des étudiants sont conservés). Vous pourrez supprimer ou corriger un appareil ensuite dans le tableau.</p>
+      <div class="ligne" style="margin:8px 0"><button id="cat-tout">Tout cocher</button><button id="cat-rien">Tout décocher</button></div>
+      <div class="catalogue-liste">
+        ${lignes.map(({ k, m }, i) => `<label class="catalogue-item">
+          <input type="checkbox" data-cat="${i}">
+          <img src="img/appareils/${k.dossier}/appareil.webp" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+          <span><b>${esc(k.nom)}</b><br><span class="small muted">${esc(k.modele)} · ${k.unite === "lbs" ? "pile en lbs" : k.chargeMin ? `départ ${fmtKg(k.chargeMin)}` : "départ à vérifier"}</span>
+          ${m ? `<br><span class="small" style="color:var(--accent)">↻ mettra à jour « ${esc(m.nom)} »</span>` : ""}</span>
+        </label>`).join("")}
+      </div>
+      <div class="ligne" style="justify-content:flex-end;margin-top:14px">
+        <button id="cat-annuler">Annuler</button><button class="primaire" id="cat-ok">Ajouter la sélection</button>
+      </div>
+    </div></div>`;
+  const fermer = () => { modal.innerHTML = ""; };
+  modal.querySelector("#fermer").onclick = fermer;
+  modal.querySelector("#cat-annuler").onclick = fermer;
+  const cases = [...modal.querySelectorAll("[data-cat]")];
+  const majBouton = () => { const n = cases.filter(x => x.checked).length; modal.querySelector("#cat-ok").textContent = n ? `Ajouter la sélection (${n})` : "Ajouter la sélection"; };
+  cases.forEach(x => x.onchange = majBouton);
+  modal.querySelector("#cat-tout").onclick = () => { cases.forEach(x => x.checked = true); majBouton(); };
+  modal.querySelector("#cat-rien").onclick = () => { cases.forEach(x => x.checked = false); majBouton(); };
+  modal.querySelector("#cat-ok").onclick = async () => {
+    const choix = cases.filter(x => x.checked).map(x => lignes[Number(x.dataset.cat)]);
+    if (!choix.length) return toast("Cochez au moins un appareil.");
+    let ajout = 0, maj = 0;
+    for (const { k, m } of choix) {
+      const { motsCles, modele, ...fiche } = k;
+      if (m) { Object.assign(m, { ...fiche, id: m.id }); maj++; }
+      else { machines.push({ ...fiche }); ajout++; }
+    }
+    await DB.saveMachines(machines);
+    fermer();
+    toast(`${ajout} appareil(s) ajouté(s), ${maj} mis à jour ✓`);
+    vueAppareils(c);
+  };
+}
+
 function vueAppareils(c) {
   c.innerHTML = `
     <div class="carte">
@@ -274,8 +332,7 @@ function vueAppareils(c) {
     <div class="carte">
       <div class="entete-carte"><h3>Appareils de la salle</h3>
         <div class="ligne">
-          <select id="sel-catalogue" style="width:auto"><option value="">📚 Ajouter depuis le catalogue…</option>
-            ${CATALOGUE.map(k => `<option value="${k.id}">${esc(k.nom)} (${esc(k.modele)})</option>`).join("")}</select>
+          <button id="btn-catalogue">📚 Catalogue (${CATALOGUE.length} appareils)</button>
           <button id="btn-ajout">+ Ajouter un appareil</button>
         </div></div>
       <p class="small muted"><b>Unité</b> : « lbs » pour une pile de plaques graduée en livres (l'étudiant saisit le chiffre gravé sur la plaque), « kg » pour une barre ou des disques.
@@ -346,26 +403,7 @@ function vueAppareils(c) {
     definirPhotos({ ...Object.fromEntries(machines.map(x => [x.id, photosDe(x.id)])), [id]: p });
     toast("Photo retirée"); vueAppareils(c);
   });
-  // Catalogue : ajoute l'appareil, ou met à jour celui qui existe déjà (on garde son identifiant → les tests sont conservés)
-  c.querySelector("#sel-catalogue").onchange = async ev => {
-    const k = CATALOGUE.find(x => x.id === ev.target.value);
-    ev.target.value = "";
-    if (!k) return;
-    machines = lire();
-    const { motsCles, modele, ...fiche } = k;
-    const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const existant = machines.find(m => m.id === k.id)
-      || machines.find(m => motsCles.some(mot => norm(m.nom).includes(norm(mot))));
-    if (existant) {
-      if (!(await demander(`Mettre à jour « ${existant.nom} » avec la fiche ${k.modele} (photo, charges, consigne) ? Les tests des étudiants sont conservés.`, "Mettre à jour"))) return;
-      Object.assign(existant, { ...fiche, id: existant.id });
-    } else {
-      machines.push({ ...fiche });
-    }
-    await DB.saveMachines(machines);
-    toast(`${k.nom} : fiche enregistrée ✓`);
-    vueAppareils(c);
-  };
+  c.querySelector("#btn-catalogue").onclick = () => ouvrirCatalogue(c, lire);
   c.querySelector("#btn-ajout").onclick = () => {
     machines = lire();
     machines.push({ id: "m" + Date.now().toString(36), nom: "Nouvel appareil", unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "", consigne: "", actif: true });

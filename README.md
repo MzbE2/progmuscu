@@ -86,10 +86,11 @@ Ce que garantissent ces règles :
    **Photos** : à la salle, ouvrez `prof.html` sur votre téléphone, onglet *Appareils*, et touchez 📷 sous chaque appareil (photo de l'appareil, de la consigne, des charges).
    La photo est compressée (≈ 100 Ko) et enregistrée tout de suite dans Firestore : rien à déposer sur GitHub, aucune règle à republier.
    **Priorité** : la photo du catalogue (marquée 📚) s'affiche en priorité ; votre photo de téléphone n'est utilisée que si le catalogue n'en a pas.
-   **Catalogue** : le menu « 📚 Ajouter depuis le catalogue » ajoute un appareil déjà rempli (photo, unité, charges, consigne).
-   Si un appareil du même type existe déjà (ex. « Leg press » créé à la main), il est mis à jour sans perdre les tests des étudiants.
-   Disponible : Presse à cuisses 45° (Matrix Magnum MG-PL70, chariot vide = 75 kg), Triceps pressdown (Matrix Magnum MG-942, pile en lbs),
-   Leg curl couché (Matrix Varsity VY-402, bras vide ≈ 10 kg). Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
+   **Catalogue** : le bouton « 📚 Catalogue » ouvre la liste des 27 appareils chargeables des brochures Matrix (Magnum, Varsity, G1),
+   avec photo, unité, pas, charge de départ (fiches techniques Matrix) et consigne de sécurité. Cochez ceux de votre salle (ou « Tout cocher »),
+   puis « Ajouter la sélection ». Un appareil du même type déjà créé (ex. « Leg curl ») est mis à jour sans perdre les tests des étudiants.
+   Les fiches marquées « départ à vérifier » n'ont pas de résistance de départ publiée : lisez l'étiquette sur la machine.
+   Le catalogue se complète dans `CATALOGUE` de `js/programmes.js` ; les photos sont dans `img/appareils/<id>/appareil.webp`. Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
 2. **Étudiants** : ajoutez-les un par un, ou collez une liste `Nom;Prénom;Groupe` copiée depuis un tableur.
 3. **QR codes** : filtrez par groupe, cliquez sur *Imprimer les cartes* et distribuez-les.
 4. L'étudiant scanne sa carte, fait son test de charge (3 à 10 répétitions) sur chaque appareil, choisit un objectif, puis suit ses séances et remplit son carnet.

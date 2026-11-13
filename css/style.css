@@ -213,3 +213,10 @@ tbody tr:hover { background: var(--surface-2); }
 .badge-catalogue { display: none; color: var(--accent); }
 .photo-case.du-catalogue .badge-catalogue { display: inline; }
 .photo-case.du-catalogue .lien.danger { display: none; }
+
+/* Catalogue d'appareils */
+.catalogue-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; max-height: 60vh; overflow: auto; }
+.catalogue-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 0; cursor: pointer; font-weight: normal; }
+.catalogue-item:has(input:checked) { border-color: var(--accent); }
+.catalogue-item input { width: auto; flex: none; }
+.catalogue-item img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
