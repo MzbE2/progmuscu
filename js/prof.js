@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos, photosDe, CATALOGUE } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos, photosDe, CATALOGUE, grouperParZone, MUSCLES, muscleDe, zoneDe, ZONES } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -133,18 +133,15 @@ function vueEtudiants(c) {
       </div>
       <div class="table-scroll" style="margin-top:12px">
         ${liste.length ? `<table>
-          <thead><tr><th>Nom</th><th>Prénom</th><th>Groupe</th><th>Code</th>
-            ${actifs.map(m => `<th>${esc(m.nom)}<br><span style="text-transform:none">test → max</span></th>`).join("")}
-            <th>Objectif</th><th>Dernière séance</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Créneau</th><th>Objectif</th><th>Dernière séance</th><th></th></tr></thead>
           <tbody>${liste.map(e => {
             const o = e.objectif && OBJECTIFS[e.objectif.type];
-            return `<tr>
+            const nbT = actifs.filter(m => e.tests?.[m.id]).length;
+            return `<tr class="ligne-etudiant" data-voir="${e.code}">
               <td><b>${esc(e.nom)}</b></td><td>${esc(e.prenom)}</td><td>${esc(e.groupe)}</td>
-              <td><code>${esc(e.code)}</code></td>
-              ${actifs.map(m => { const t = e.tests?.[m.id]; return `<td class="num">${t ? `${repsDuTest(t)} × ${fmtChargeCourt(t.charge3, m)} → <b>${fmtChargeCourt(t.max, m)}</b>` : `<span class="muted">—</span>`}</td>`; }).join("")}
               <td>${o ? `${o.icone} ${esc(o.nom)}<br><span class="small muted">${e.objectif.termine ? "Cycle terminé" : `${e.objectif.nbFaites || 0}/${o.seances} séances`}</span>` : `<span class="muted">—</span>`}</td>
               <td class="small">${fmtDate(e.objectif?.derniere)}</td>
-              <td><button class="lien" data-voir="${e.code}">Voir</button></td>
+              <td><button class="small" data-voir="${e.code}">Voir <span class="muted">(${nbT} max)</span></button></td>
             </tr>`;
           }).join("")}</tbody></table>` : `<div class="vide">Aucun étudiant${etudiants.length ? " pour ce filtre" : ". Ajoutez-en ci-dessus."}</div>`}
       </div>
@@ -168,7 +165,7 @@ function vueEtudiants(c) {
   c.querySelector("#fg").onchange = ev => { filtreGroupe = ev.target.value; vueEtudiants(c); };
   c.querySelector("#btn-csv").onclick = () => exporterCSV(liste);
   c.querySelector("#btn-refresh").onclick = async () => { await charger(); rendre(); toast("Données actualisées"); };
-  c.querySelectorAll("[data-voir]").forEach(b => b.onclick = () => ficheEtudiant(b.dataset.voir));
+  c.querySelectorAll("[data-voir]").forEach(b => b.onclick = ev => { ev.stopPropagation(); ficheEtudiant(b.dataset.voir); });
 }
 
 function exporterCSV(liste) {
@@ -199,12 +196,13 @@ async function ficheEtudiant(code) {
       <div id="qr-fiche" style="margin:10px 0"></div>
       <h3 style="margin-top:14px">Maxima</h3>
       <table><thead><tr><th>Appareil</th><th>Test (rép. × charge)</th><th>Max estimé</th><th>Date</th><th>Saisir un test</th></tr></thead><tbody>
-        ${machines.map(m => { const t = e.tests?.[m.id]; return `<tr><td>${esc(m.nom)}</td>
+        ${grouperParZone(machines).map(z => `<tr class="ligne-zone"><td colspan="5">${z.icone} ${esc(z.nom)}</td></tr>` + z.machines.map(m => { const t = e.tests?.[m.id]; return `<tr><td>${esc(m.nom)}${muscleDe(m) ? `<br><span class="small muted">${esc(MUSCLES[muscleDe(m)].nom)}</span>` : ""}</td>
           <td class="num">${t ? `${repsDuTest(t)} × ${fmtChargeCourt(t.charge3, m)}` : "—"}</td><td class="num"><b>${t ? fmtChargeCourt(t.max, m) : "—"}</b></td><td class="small">${t ? fmtDate(t.date) : ""}</td>
-          <td><div class="ligne" style="flex-wrap:nowrap;gap:4px"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="${uniteDe(m)}" style="width:90px"><span class="small">×</span><input type="number" step="1" min="${REPS_MIN}" max="${REPS_MAX}" value="${REPS_TEST}" data-test-reps="${m.id}" title="Répétitions (${REPS_MIN} à ${REPS_MAX})" style="width:60px"><span class="small">rép.</span><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")}
+          <td><div class="ligne" style="flex-wrap:nowrap;gap:4px"><input type="number" step="${m.increment}" data-test-input="${m.id}" placeholder="${uniteDe(m)}" style="width:90px"><span class="small">×</span><input type="number" step="1" min="${REPS_MIN}" max="${REPS_MAX}" value="${REPS_TEST}" data-test-reps="${m.id}" title="Répétitions (${REPS_MIN} à ${REPS_MAX})" style="width:60px"><span class="small">rép.</span><button class="small" data-test="${m.id}">OK</button></div></td></tr>`; }).join("")).join("")}
       </tbody></table>
       <h3 style="margin-top:18px">Objectif</h3>
       <p>${o ? `${o.icone} <b>${esc(o.nom)}</b> — ${e.objectif.termine ? "cycle terminé" : `${seances.filter(s => s.cycleId === e.objectif.cycleId).length}/${o.seances} séances`} (début ${fmtDate(e.objectif.debut)})` : "Aucun objectif choisi."}</p>
+      ${o && e.objectif.selection?.length ? `<p class="small">Appareils du cycle : ${e.objectif.selection.map(id => machines.find(m => m.id === id)).filter(Boolean).map(m => esc(m.nom)).join(" · ")}</p>` : ""}
       <h3 style="margin-top:18px">Carnet d'entraînement (${seances.length})</h3>
       ${seances.length ? `<div class="table-scroll"><table><thead><tr><th>Date</th><th>Séance</th><th>Appareil</th><th>Charge</th><th>Séries</th><th>Ressenti</th></tr></thead><tbody>
         ${[...seances].reverse().map(s => (s.lignes?.length ? s.lignes : [null]).map((l, i) => `<tr>
@@ -311,8 +309,9 @@ function vueAppareils(c) {
       <h3>📷 Photos des appareils</h3>
       <p class="small muted">Les <b>photos du catalogue</b> (marquées 📚) sont utilisées en priorité. Pour les cases vides 📷, prenez la photo à la salle avec votre téléphone
       (ou choisissez-en une dans la galerie) : elle est enregistrée tout de suite et visible par les étudiants.</p>
+      ${grouperParZone(machines).map(z => `<h4 class="titre-zone">${z.icone} ${esc(z.nom)}</h4>
       <div class="photos-appareils">
-        ${machines.map(m => `<div class="photo-appareil">
+        ${z.machines.map(m => `<div class="photo-appareil">
           <b>${esc(m.nom)}</b>
           <div class="photo-cases">${TYPES_PHOTOS.map(([type, titre]) => {
             const url = urlPhoto(m, type), prise = !!photosDe(m.id)[type];
@@ -327,7 +326,7 @@ function vueAppareils(c) {
             </div>`;
           }).join("")}</div>
         </div>`).join("")}
-      </div>
+      </div>`).join("")}
     </div>
     <div class="carte">
       <div class="entete-carte"><h3>Appareils de la salle</h3>
@@ -341,10 +340,12 @@ function vueAppareils(c) {
       <p class="small muted"><b>Dossier photos</b> (facultatif) : seulement si vous déposez vous-même des photos sur GitHub dans <code>img/appareils/</code>.
       Le plus simple est d'utiliser les boutons 📷 ci-dessus.</p>
       <div class="table-scroll"><table class="table-appareils">
-        <thead><tr><th>Photo</th><th>Nom</th><th>Unité</th><th>Pas</th><th>Min</th><th>Max</th><th>Dossier photos</th><th>Consigne de sécurité</th><th>Actif</th><th></th></tr></thead>
-        <tbody id="tb-app">${machines.map((m, i) => `<tr data-i="${i}">
+        <thead><tr><th>Photo</th><th>Nom</th><th>Muscle</th><th>Unité</th><th>Pas</th><th>Min</th><th>Max</th><th>Dossier photos</th><th>Consigne de sécurité</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="tb-app">${grouperParZone(machines.map((m, i) => ({ ...m, _i: i }))).map(z => `<tr class="ligne-zone"><td colspan="11">${z.icone} ${esc(z.nom)}</td></tr>` + z.machines.map(m => ({ m: machines[m._i], i: m._i })).map(({ m, i }) => `<tr data-i="${i}">
           <td style="width:56px">${apercu(m)}</td>
           <td style="min-width:150px"><input class="m-nom" value="${esc(m.nom)}"></td>
+          <td style="width:140px"><select class="m-muscle"><option value="">${muscleDe(m) && !m.muscle ? `auto : ${esc(MUSCLES[muscleDe(m)].nom)}` : "—"}</option>
+            ${ZONES.filter(z => z.id !== "autre").map(z => `<optgroup label="${esc(z.nom)}">${Object.entries(MUSCLES).filter(([, v]) => v.zone === z.id).map(([k, v]) => `<option value="${k}" ${m.muscle === k ? "selected" : ""}>${esc(v.nom)}</option>`).join("")}</optgroup>`).join("")}</select></td>
           <td style="width:96px"><select class="m-unite"><option value="kg" ${uniteDe(m) === "kg" ? "selected" : ""}>kg</option><option value="lbs" ${uniteDe(m) === "lbs" ? "selected" : ""}>lbs</option></select></td>
           <td style="width:92px"><input class="m-inc" type="number" step="0.25" min="0.25" value="${m.increment}"></td>
           <td style="width:92px"><input class="m-min" type="number" step="0.5" min="0" value="${m.chargeMin || 0}"></td>
@@ -352,16 +353,18 @@ function vueAppareils(c) {
           <td style="min-width:170px"><input class="m-dossier" value="${esc(m.dossier || "")}" placeholder="ex. triceps-pressdown"></td>
           <td style="min-width:180px"><input class="m-cons" value="${esc(m.consigne || "")}"></td>
           <td style="width:56px;text-align:center"><input class="m-actif" type="checkbox" ${m.actif !== false ? "checked" : ""} style="width:auto"></td>
-          <td><button class="lien danger" data-del="${i}" title="Retirer">✕</button></td></tr>`).join("")}
+          <td><button class="lien danger" data-del="${i}" title="Retirer">✕</button></td></tr>`).join("")).join("")}
         </tbody></table></div>
       <button class="primaire" id="btn-save" style="margin-top:14px">Enregistrer les appareils</button>
       <p class="small muted" style="margin-top:8px">Conseil : décochez « Actif » plutôt que de supprimer un appareil déjà testé, pour garder l'historique des étudiants.
       Ne changez pas l'unité d'un appareil déjà testé : les maxima enregistrés seraient lus dans la nouvelle unité.</p>
     </div>`;
   const dossierPropre = v => v.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  const lire = () => [...c.querySelectorAll("#tb-app tr")].map(tr => {
+  const lire = () => [...c.querySelectorAll("#tb-app tr[data-i]")].map(tr => {
     const m = machines[+tr.dataset.i];
-    return { ...m, nom: tr.querySelector(".m-nom").value.trim(),
+    const { muscle: _ancien, ...base } = m;
+    const muscle = tr.querySelector(".m-muscle").value;
+    return { ...base, ...(muscle ? { muscle } : {}), nom: tr.querySelector(".m-nom").value.trim(),
       unite: tr.querySelector(".m-unite").value,
       increment: +tr.querySelector(".m-inc").value || 2.5,
       chargeMin: +tr.querySelector(".m-min").value || 0,
@@ -411,7 +414,8 @@ function vueAppareils(c) {
   };
   c.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     if (!(await demander("Retirer cet appareil ? Les tests déjà faits dessus ne seront plus affichés.", "Retirer"))) return;
-    machines = lire(); machines.splice(+b.dataset.del, 1); vueAppareils(c);
+    const k = [...c.querySelectorAll("#tb-app tr[data-i]")].findIndex(tr => tr.dataset.i === b.dataset.del);
+    machines = lire(); machines.splice(k, 1); vueAppareils(c);
   });
   c.querySelector("#btn-save").onclick = async () => {
     machines = lire().filter(m => m.nom);

@@ -267,20 +267,102 @@ export const RESSENTIS = [
 
 // ---------- 5. Appareils par défaut ----------
 export const MACHINES_DEFAUT = [
-  { id: "squat", nom: "Squat", increment: 2.5, chargeMin: 20, actif: true,
+  { id: "squat", muscle: "quadriceps", nom: "Squat", increment: 2.5, chargeMin: 20, actif: true,
     consigne: "Barres de sécurité réglées sous la hauteur de descente. Dos neutre, genoux dans l'axe des pieds." },
-  { id: "dc", nom: "Développé couché", increment: 2.5, chargeMin: 20, actif: true,
+  { id: "dc", muscle: "pectoraux", nom: "Développé couché", increment: 2.5, chargeMin: 20, actif: true,
     consigne: "Pareur obligatoire. Pieds au sol, omoplates serrées, barre au niveau des pectoraux." },
-  { id: "triceps-pressdown", nom: "Triceps pressdown", unite: "lbs",
+  { id: "triceps-pressdown", muscle: "triceps", nom: "Triceps pressdown", unite: "lbs",
     increment: 5, chargeMin: 5, chargeMax: 100, dossier: "triceps-pressdown", actif: true,
     consigne: "Coudes collés au corps, seuls les avant-bras bougent. Écartez la corde en bas du mouvement." }
 ];
+
+// ---------- Zones musculaires ----------
+// Chaque appareil a un groupe musculaire principal (champ « muscle », réglable dans l'onglet Appareils).
+// S'il n'est pas renseigné, il est deviné d'après le nom de l'appareil.
+export const ZONES = [
+  { id: "inf", nom: "Membres inférieurs", icone: "🦵" },
+  { id: "sup", nom: "Membres supérieurs", icone: "💪" },
+  { id: "tronc", nom: "Abdos & tronc", icone: "🧱" },
+  { id: "autre", nom: "Autres appareils", icone: "⚙️" }
+];
+export const MUSCLES = {
+  quadriceps: { nom: "Quadriceps", zone: "inf" },
+  fessiers: { nom: "Fessiers", zone: "inf" },
+  ischios: { nom: "Ischio-jambiers", zone: "inf" },
+  mollets: { nom: "Mollets", zone: "inf" },
+  pectoraux: { nom: "Pectoraux", zone: "sup" },
+  dos: { nom: "Dos", zone: "sup" },
+  epaules: { nom: "Épaules", zone: "sup" },
+  biceps: { nom: "Biceps", zone: "sup" },
+  triceps: { nom: "Triceps", zone: "sup" },
+  abdos: { nom: "Abdominaux", zone: "tronc" },
+  lombaires: { nom: "Lombaires", zone: "tronc" }
+};
+const DEVINE = [
+  [/lombaire|back ext|reverse|hyperext/, "lombaires"], [/abdo|crunch|gainage/, "abdos"],
+  [/leg ?ext|quadri/, "quadriceps"], [/leg ?curl|ischio/, "ischios"], [/mollet|calf/, "mollets"],
+  [/hip|glute|fessier/, "fessiers"], [/triceps|dips/, "triceps"], [/biceps|curl/, "biceps"],
+  [/epaule|shoulder|militaire|elevation/, "epaules"], [/tirage|row|pulldown|traction|\bdos\b/, "dos"],
+  [/developpe|couche|pec|chest|bench|butterfly|ecarte/, "pectoraux"],
+  [/squat|presse|leg ?press|fente|lunge|smith/, "quadriceps"]
+];
+const normNom = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+export function muscleDe(m) {
+  if (m?.muscle && MUSCLES[m.muscle]) return m.muscle;
+  const n = normNom(m?.nom);
+  const t = DEVINE.find(([re]) => re.test(n));
+  return t ? t[1] : null;
+}
+export function zoneDe(m) { const mu = muscleDe(m); return mu ? MUSCLES[mu].zone : "autre"; }
+
+// Regroupe les appareils par zone (inférieurs → supérieurs → tronc → autres), puis par muscle
+export function grouperParZone(liste) {
+  const ordre = Object.keys(MUSCLES);
+  const rang = m => { const i = ordre.indexOf(muscleDe(m)); return i < 0 ? 99 : i; };
+  return ZONES.map(z => ({ ...z, machines: liste.filter(m => zoneDe(m) === z.id).sort((a, b) => rang(a) - rang(b)) }))
+    .filter(z => z.machines.length);
+}
+
+// ---------- Sélection d'appareils pour un cycle ----------
+// Nombre d'appareils par séance selon l'objectif :
+//  force / puissance : peu d'exercices lourds, longues récupérations → 4
+//  volume / sculpter / endurance : un exercice par grand groupe → 6
+//  affiner (circuit) : plus de postes pour un circuit qui dure → 8
+export const NB_APPAREILS = { force: 4, puissance: 4, hypertrophie: 6, sculpter: 6, endurance: 6, affiner: 8 };
+// Ordre de priorité : on alterne bas du corps / haut du corps, puis les petits groupes
+export const ORDRE_SELECTION = ["quadriceps", "dos", "pectoraux", "ischios", "epaules", "fessiers", "abdos", "triceps", "biceps", "mollets", "lombaires"];
+
+function hache(txt) { let h = 0; for (const c of String(txt)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); }
+
+// Choisit les appareils du cycle : un par groupe musculaire, en priorité ceux déjà testés.
+// La sélection est FIXE pour tout le cycle (indispensable pour suivre la progression).
+export function choisirAppareils(objectifType, machinesActives, tests = {}, graine = "") {
+  const nb = NB_APPAREILS[objectifType] || 6;
+  const tri = (a, b) => (!!tests[b.id] - !!tests[a.id]) || (hache(graine + a.id) - hache(graine + b.id));
+  const choix = [];
+  for (const mu of ORDRE_SELECTION) {
+    if (choix.length >= nb) break;
+    const c = machinesActives.filter(m => muscleDe(m) === mu && !choix.includes(m)).sort(tri)[0];
+    if (c) choix.push(c);
+  }
+  // Pas assez de groupes différents dans la salle : on complète avec les appareils restants
+  for (const m of [...machinesActives].sort(tri)) { if (choix.length >= nb) break; if (!choix.includes(m)) choix.push(m); }
+  return choix.map(m => m.id);
+}
+
+// Appareil de remplacement (appareil occupé) : même muscle, sinon même zone
+export function remplacant(m, machinesActives, exclus = [], tests = {}) {
+  const libres = machinesActives.filter(x => x.id !== m.id && !exclus.includes(x.id));
+  const tri = (a, b) => !!tests[b.id] - !!tests[a.id];
+  return libres.filter(x => muscleDe(x) === muscleDe(m)).sort(tri)[0]
+    || libres.filter(x => zoneDe(x) === zoneDe(m)).sort(tri)[0] || null;
+}
 
 // ---------- Catalogue : appareils pré-remplis (photo, charges, consigne) ----------
 // Bouton « Ajouter depuis le catalogue » dans l'onglet Appareils de l'espace enseignant.
 // motsCles : sert à repérer un appareil déjà créé à la main, pour le mettre à jour au lieu d'en créer un second.
 export const CATALOGUE = [
-  { id: "leg-press-45", nom: "Presse à cuisses 45°", modele: "Matrix Magnum MG-PL70",
+  { id: "leg-press-45", muscle: "quadriceps", nom: "Presse à cuisses 45°", modele: "Matrix Magnum MG-PL70",
     motsCles: ["leg press", "legpress", "presse a cuisses", "presse cuisses", "presse 45"],
     unite: "kg", increment: 2.5, chargeMin: 75, chargeMax: 490, dossier: "leg-press-45", actif: true,
     info: "Le chariot vide pèse déjà 75 kg (charge de départ indiquée par Matrix). Saisissez toujours la charge totale : 75 kg + les disques chargés.",
@@ -288,135 +370,135 @@ export const CATALOGUE = [
 
   // Réglages (lbs, pas de 5, 5 à 100) relevés sur la pile de la machine de la salle :
   // la brochure Matrix annonce une pile de 87,1 kg / 192 lbs pour le MG-942, différente de celle de la salle.
-  { id: "triceps-pressdown", nom: "Triceps pressdown", modele: "Matrix Magnum MG-942",
+  { id: "triceps-pressdown", muscle: "triceps", nom: "Triceps pressdown", modele: "Matrix Magnum MG-942",
     motsCles: ["pressdown", "pushdown", "push down", "poulie triceps"],
     unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "triceps-pressdown", actif: true,
     info: "La pile est graduée en livres (lbs) : placez la goupille sur le chiffre indiqué par l'appli (100 lbs ≈ 45 kg).",
     consigne: "Debout face à la poulie, pieds largeur du bassin, genoux légèrement fléchis, buste un peu penché en avant. Coudes collés au corps : seuls les avant-bras bougent. Écartez la corde en bas du mouvement, remontez lentement sans laisser la pile claquer. Changez la goupille seulement pile au repos." },
 
-  { id: "leg-curl-couche", nom: "Leg curl couché", modele: "Matrix Varsity VY-402",
+  { id: "leg-curl-couche", muscle: "ischios", nom: "Leg curl couché", modele: "Matrix Varsity VY-402",
     motsCles: ["leg curl", "legcurl", "ischio", "curl jambe"],
     unite: "kg", increment: 1.25, chargeMin: 10, actif: true, dossier: "leg-curl-couche",
     info: "Machine à disques : le bras vide équivaut déjà à environ 10 kg (21 lb indiqués par Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés.",
     consigne: "Allongé sur le ventre, genoux juste au-delà du bord du banc (alignés avec l'axe de rotation), boudin posé au-dessus des talons. Bassin plaqué contre le banc, ne cambrez pas le dos. Montez et descendez lentement, sans à-coup. Chargez et déchargez les disques bras posé en butée basse." },
 
   // ---- Ajouts : tous les appareils chargeables des brochures Matrix (résistances de départ : fiches techniques Matrix) ----
-  { id: "vertical-bench-press", nom: "Développé vertical (disques)", modele: "Matrix Magnum MG-PL12",
+  { id: "vertical-bench-press", muscle: "pectoraux", nom: "Développé vertical (disques)", modele: "Matrix Magnum MG-PL12",
     motsCles: ["developpe vertical", "vertical bench", "chest press", "presse pectoraux"],
     unite: "kg", increment: 2.5, chargeMin: 7.5, dossier: "vertical-bench-press", actif: true,
     info: "Le bras vide équivaut déjà à 6,8 kg (valeur Matrix). Saisissez toujours la charge totale : 7,5 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez le siège pour que les poignées soient à hauteur de poitrine. Dos et tête collés au dossier, pieds au sol. Poussez sans verrouiller les coudes, revenez lentement sans laisser les charges se poser. Chargez les disques des deux côtés." },
-  { id: "supine-bench-press", nom: "Développé couché guidé (disques)", modele: "Matrix Magnum MG-PL13",
+  { id: "supine-bench-press", muscle: "pectoraux", nom: "Développé couché guidé (disques)", modele: "Matrix Magnum MG-PL13",
     motsCles: ["supine", "couche guide", "développé couché machine"],
     unite: "kg", increment: 2.5, chargeMin: 5, dossier: "supine-bench-press", actif: true,
     info: "Le bras vide équivaut déjà à 4,5 kg (valeur Matrix). Saisissez toujours la charge totale : 5 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Allongé, yeux sous les poignées, dos et fessiers en contact avec le banc, pieds au sol. Poussez sans verrouiller les coudes, descendez lentement jusqu'à hauteur de poitrine. Chargez les disques des deux côtés." },
-  { id: "incline-bench-press", nom: "Développé incliné (disques)", modele: "Matrix Magnum MG-PL14",
+  { id: "incline-bench-press", muscle: "pectoraux", nom: "Développé incliné (disques)", modele: "Matrix Magnum MG-PL14",
     motsCles: ["incline", "incliné", "incline bench"],
     unite: "kg", increment: 2.5, chargeMin: 5, dossier: "incline-bench-press", actif: true,
     info: "Le bras vide équivaut déjà à 5,4 kg (valeur Matrix). Saisissez toujours la charge totale : 5 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez le siège pour que les poignées soient au niveau du haut de la poitrine. Dos collé au dossier, pieds au sol. Poussez sans verrouiller les coudes, revenez lentement. Chargez les disques des deux côtés." },
-  { id: "vertical-decline-press", nom: "Développé décliné (disques)", modele: "Matrix Magnum MG-PL15",
+  { id: "vertical-decline-press", muscle: "pectoraux", nom: "Développé décliné (disques)", modele: "Matrix Magnum MG-PL15",
     motsCles: ["decline", "décliné"],
     unite: "kg", increment: 2.5, chargeMin: 7.5, dossier: "vertical-decline-press", actif: true,
     info: "Le bras vide équivaut déjà à 6,8 kg (valeur Matrix). Saisissez toujours la charge totale : 7,5 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez le siège pour que les poignées soient au niveau du bas de la poitrine. Dos collé au dossier, pieds au sol. Poussez vers le bas et l'avant sans verrouiller les coudes, revenez lentement. Chargez les disques des deux côtés." },
-  { id: "shoulder-press-disques", nom: "Développé épaules (disques)", modele: "Matrix Magnum MG-PL23",
+  { id: "shoulder-press-disques", muscle: "epaules", nom: "Développé épaules (disques)", modele: "Matrix Magnum MG-PL23",
     motsCles: ["developpe epaules", "développé épaules", "shoulder press", "militaire"],
     unite: "kg", increment: 2.5, chargeMin: 5, dossier: "shoulder-press-disques", actif: true,
     info: "Le bras vide équivaut déjà à 5,4 kg (valeur Matrix). Saisissez toujours la charge totale : 5 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez le siège pour que les poignées partent à hauteur d'épaules. Dos collé au dossier, ne cambrez pas. Poussez sans verrouiller les coudes, redescendez lentement. Chargez les disques des deux côtés." },
-  { id: "lat-pulldown-disques", nom: "Tirage vertical (disques)", modele: "Matrix Magnum MG-PL33",
+  { id: "lat-pulldown-disques", muscle: "dos", nom: "Tirage vertical (disques)", modele: "Matrix Magnum MG-PL33",
     motsCles: ["tirage vertical disques", "lat pulldown disques"],
     unite: "kg", increment: 2.5, chargeMin: 0, dossier: "lat-pulldown-disques", actif: true,
     info: "Résistance de départ non communiquée par Matrix : regardez l'étiquette « Starting resistance » sur la machine, puis indiquez-la comme charge minimum. En attendant, saisissez seulement le poids des disques, toujours de la même façon.",
     consigne: "Réglez le boudin sur les cuisses pour bien les bloquer. Buste droit, légèrement penché en arrière. Tirez les poignées vers le haut de la poitrine en serrant les omoplates, remontez lentement bras presque tendus. Chargez les disques des deux côtés." },
-  { id: "seated-row-disques", nom: "Tirage horizontal assis (disques)", modele: "Matrix Magnum MG-PL34",
+  { id: "seated-row-disques", muscle: "dos", nom: "Tirage horizontal assis (disques)", modele: "Matrix Magnum MG-PL34",
     motsCles: ["tirage horizontal disques", "seated row", "rowing assis"],
     unite: "kg", increment: 2.5, chargeMin: 10, dossier: "seated-row-disques", actif: true,
     info: "Le bras vide équivaut déjà à 11,3 kg (valeur Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez le siège pour que les poignées soient à hauteur de poitrine, buste contre l'appui. Dos droit, épaules basses. Tirez en serrant les omoplates, coudes près du corps, revenez lentement bras presque tendus. Chargez les disques des deux côtés." },
-  { id: "ab-crunch-bench", nom: "Banc crunch abdos (disques)", modele: "Matrix Magnum MG-PL50",
+  { id: "ab-crunch-bench", muscle: "abdos", nom: "Banc crunch abdos (disques)", modele: "Matrix Magnum MG-PL50",
     motsCles: ["crunch", "abdo"],
     unite: "kg", increment: 1.25, chargeMin: 10, dossier: "ab-crunch-bench", actif: true,
     info: "Le bras vide équivaut déjà à 11,3 kg (valeur Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés. Charge maximale prévue : 34 kg.",
     consigne: "Pieds calés sous les rouleaux, mains sur les poignées. Enroulez le buste en rapprochant les côtes du bassin, sans tirer avec les bras ni sur la nuque. Revenez lentement sans reposer la charge." },
-  { id: "smith-magnum", nom: "Smith machine (Magnum)", modele: "Matrix Magnum MG-PL62",
+  { id: "smith-magnum", muscle: "quadriceps", nom: "Smith machine (Magnum)", modele: "Matrix Magnum MG-PL62",
     motsCles: ["smith"],
     unite: "kg", increment: 2.5, chargeMin: 10, dossier: "smith-magnum", actif: true,
     info: "Le bras vide équivaut déjà à 11,3 kg (valeur Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez les butées de sécurité juste sous le point le plus bas du mouvement AVANT de commencer. Décrochez la barre par rotation des poignets, raccrochez-la à chaque fin de série. Disques identiques des deux côtés, colliers mis. Ne travaillez jamais sans butées." },
-  { id: "hack-squat", nom: "Hack squat", modele: "Matrix Magnum MG-PL71",
+  { id: "hack-squat", muscle: "quadriceps", nom: "Hack squat", modele: "Matrix Magnum MG-PL71",
     motsCles: ["hack"],
     unite: "kg", increment: 2.5, chargeMin: 47.5, dossier: "hack-squat", actif: true,
     info: "Le bras vide équivaut déjà à 47,6 kg (valeur Matrix). Saisissez toujours la charge totale : 47,5 kg + les disques chargés.",
     consigne: "Dos et épaules bien calés contre les appuis, pieds à plat à largeur de bassin, genoux dans l'axe des pieds. Réglez la butée basse, déverrouillez le chariot pieds en place. Descendez contrôlé sans décoller les talons, ne verrouillez pas les genoux en haut. Reverrouillez avant de sortir." },
-  { id: "standing-calf", nom: "Mollets debout (disques)", modele: "Matrix Magnum MG-PL76",
+  { id: "standing-calf", muscle: "mollets", nom: "Mollets debout (disques)", modele: "Matrix Magnum MG-PL76",
     motsCles: ["mollet debout", "standing calf", "mollets debout"],
     unite: "kg", increment: 2.5, chargeMin: 30, dossier: "standing-calf", actif: true,
     info: "Le bras vide équivaut déjà à 30,4 kg (valeur Matrix). Saisissez toujours la charge totale : 30 kg + les disques chargés.",
     consigne: "Réglez les épaulières à votre taille. Avant des pieds sur la plateforme, talons dans le vide, genoux tendus mais non verrouillés. Montez sur la pointe des pieds, redescendez lentement en étirant le mollet. Gardez le dos droit." },
-  { id: "seated-calf", nom: "Mollets assis (disques)", modele: "Matrix Magnum MG-PL77",
+  { id: "seated-calf", muscle: "mollets", nom: "Mollets assis (disques)", modele: "Matrix Magnum MG-PL77",
     motsCles: ["mollet assis", "seated calf", "mollets assis"],
     unite: "kg", increment: 2.5, chargeMin: 10, dossier: "seated-calf", actif: true,
     info: "Le bras vide équivaut déjà à 11,3 kg (valeur Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés.",
     consigne: "Réglez les appuis sur le bas des cuisses. Avant des pieds sur la plateforme, talons libres. Débloquez la barre de sécurité, montez sur la pointe des pieds puis redescendez lentement. Rebloquez avant de sortir." },
-  { id: "glute-trainer", nom: "Hip thrust (Glute trainer)", modele: "Matrix Magnum MG-PL78",
+  { id: "glute-trainer", muscle: "fessiers", nom: "Hip thrust (Glute trainer)", modele: "Matrix Magnum MG-PL78",
     motsCles: ["glute", "hip thrust", "fessier"],
     unite: "kg", increment: 2.5, chargeMin: 22.5, dossier: "glute-trainer", actif: true,
     info: "Le bras vide équivaut déjà à 22,7 kg (valeur Matrix). Saisissez toujours la charge totale : 22,5 kg + les disques chargés.",
     consigne: "Haut du dos sur l'appui, ceinture du boudin sur les hanches, pieds à plat largeur de bassin. Poussez avec les talons jusqu'à l'alignement épaules-hanches-genoux, sans cambrer le bas du dos. Redescendez lentement." },
-  { id: "squat-lunge", nom: "Squat / fente guidé (disques)", modele: "Matrix Magnum MG-PL79",
+  { id: "squat-lunge", muscle: "fessiers", nom: "Squat / fente guidé (disques)", modele: "Matrix Magnum MG-PL79",
     motsCles: ["squat lunge", "squat / fente", "fente"],
     unite: "kg", increment: 2.5, chargeMin: 15, dossier: "squat-lunge", actif: true,
     info: "Le bras vide équivaut déjà à 16,3 kg (valeur Matrix). Saisissez toujours la charge totale : 15 kg + les disques chargés. Charge maximale efficace : 144 kg.",
     consigne: "Épaules sous les appuis, buste droit, pieds largeur de bassin. Descendez contrôlé, genoux dans l'axe des pieds, talons au sol. Ne verrouillez pas les genoux en haut. Pour la fente, gardez le genou avant au-dessus de la cheville." },
-  { id: "reverse-back-extension", nom: "Extension lombaire inversée (disques)", modele: "Matrix Magnum MG-405",
+  { id: "reverse-back-extension", muscle: "lombaires", nom: "Extension lombaire inversée (disques)", modele: "Matrix Magnum MG-405",
     motsCles: ["reverse", "lombaire", "hyperextension"],
     unite: "kg", increment: 2.5, chargeMin: 7.5, dossier: "reverse-back-extension", actif: true,
     info: "Le bras vide équivaut déjà à 7 kg (valeur Matrix). Saisissez toujours la charge totale : 7,5 kg + les disques chargés.",
     consigne: "Buste allongé sur l'appui, hanches au bord, mains sur les poignées. Montez les jambes jusqu'à l'horizontale sans cambrer au-delà, redescendez lentement. Réglez le point de départ selon votre souplesse ; débutez léger." },
-  { id: "lat-pulldown-pile", nom: "Tirage vertical (pile)", modele: "Matrix Magnum MG-921",
+  { id: "lat-pulldown-pile", muscle: "dos", nom: "Tirage vertical (pile)", modele: "Matrix Magnum MG-921",
     motsCles: ["tirage vertical", "lat pulldown", "tirage poitrine"],
     unite: "lbs", increment: 10, chargeMin: 10, dossier: "lat-pulldown-pile", actif: true,
     info: "Machine à pile : placez la goupille sur la charge indiquée par l'appli. Vérifiez l'unité (lbs ou kg) et le pas inscrits sur la pile, et corrigez-les dans la fiche appareil si besoin.",
     consigne: "Réglez le boudin pour bloquer les cuisses. Prise un peu plus large que les épaules, buste légèrement en arrière. Tirez la barre devant vers le haut de la poitrine (jamais derrière la nuque), remontez lentement sans laisser la pile claquer." },
-  { id: "low-row-pile", nom: "Tirage horizontal (pile)", modele: "Matrix Magnum MG-926",
+  { id: "low-row-pile", muscle: "dos", nom: "Tirage horizontal (pile)", modele: "Matrix Magnum MG-926",
     motsCles: ["tirage horizontal", "low row", "rowing"],
     unite: "lbs", increment: 10, chargeMin: 10, dossier: "low-row-pile", actif: true,
     info: "Machine à pile : placez la goupille sur la charge indiquée par l'appli. Vérifiez l'unité (lbs ou kg) et le pas inscrits sur la pile, et corrigez-les dans la fiche appareil si besoin.",
     consigne: "Pieds calés sur les appuis, genoux légèrement fléchis, dos droit. Tirez la poignée vers le nombril en serrant les omoplates, sans basculer le buste en arrière. Revenez lentement sans arrondir le dos." },
-  { id: "lat-low-row-pile", nom: "Tirage vertical / horizontal (pile)", modele: "Matrix Magnum MG-946",
+  { id: "lat-low-row-pile", muscle: "dos", nom: "Tirage vertical / horizontal (pile)", modele: "Matrix Magnum MG-946",
     motsCles: ["tirage vertical / horizontal", "lat pulldown / low row"],
     unite: "lbs", increment: 10, chargeMin: 10, dossier: "lat-low-row-pile", actif: true,
     info: "Machine à pile : placez la goupille sur la charge indiquée par l'appli. Vérifiez l'unité (lbs ou kg) et le pas inscrits sur la pile, et corrigez-les dans la fiche appareil si besoin.",
     consigne: "Une seule pile pour deux exercices : faites un test séparé si vous utilisez les deux postes. Tirage vertical : cuisses bloquées, barre devant vers la poitrine. Tirage horizontal : dos droit, poignée vers le nombril. Retour lent sans faire claquer la pile." },
-  { id: "angled-smith", nom: "Smith machine inclinée (Varsity)", modele: "Matrix Varsity VY-M49",
+  { id: "angled-smith", muscle: "quadriceps", nom: "Smith machine inclinée (Varsity)", modele: "Matrix Varsity VY-M49",
     motsCles: ["smith incline", "smith inclin", "angled smith"],
     unite: "kg", increment: 2.5, chargeMin: 10, dossier: "angled-smith", actif: true,
     info: "Le bras vide équivaut déjà à 11,3 kg (valeur Matrix). Saisissez toujours la charge totale : 10 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez les butées de sécurité juste sous le point le plus bas AVANT de commencer. Décrochez et raccrochez la barre par rotation des poignets. Disques identiques des deux côtés, colliers mis. Ne travaillez jamais sans butées." },
-  { id: "smith-g1", nom: "Smith machine (G1)", modele: "Matrix G1-FW161",
+  { id: "smith-g1", muscle: "quadriceps", nom: "Smith machine (G1)", modele: "Matrix G1-FW161",
     motsCles: ["smith g1"],
     unite: "kg", increment: 2.5, chargeMin: 20, dossier: "smith-g1", actif: true,
     info: "Le bras vide équivaut déjà à 20 kg (valeur Matrix). Saisissez toujours la charge totale : 20 kg + les disques chargés (additionnez les disques des deux côtés).",
     consigne: "Réglez les butées de sécurité juste sous le point le plus bas AVANT de commencer. Décrochez et raccrochez la barre par rotation des poignets. Disques identiques des deux côtés, colliers mis. Ne travaillez jamais sans butées." },
-  { id: "perfect-squat", nom: "Perfect squat (Varsity)", modele: "Matrix Varsity VY-400",
+  { id: "perfect-squat", muscle: "quadriceps", nom: "Perfect squat (Varsity)", modele: "Matrix Varsity VY-400",
     motsCles: ["perfect squat"],
     unite: "kg", increment: 2.5, chargeMin: 0, dossier: "perfect-squat", actif: true,
     info: "Résistance de départ non communiquée par Matrix : regardez l'étiquette « Starting resistance » sur la machine, puis indiquez-la comme charge minimum. En attendant, saisissez seulement le poids des disques, toujours de la même façon.",
     consigne: "Épaules sous les appuis, dos contre le dossier, pieds à plat sur la plateforme, largeur de bassin. Descendez contrôlé, genoux dans l'axe des pieds, talons au sol. Ne verrouillez pas les genoux en haut. Réglez la hauteur de départ avant de charger." },
-  { id: "leg-extension", nom: "Leg extension (Varsity)", modele: "Matrix Varsity VY-401",
+  { id: "leg-extension", muscle: "quadriceps", nom: "Leg extension (Varsity)", modele: "Matrix Varsity VY-401",
     motsCles: ["leg extension", "extension jambe", "quadriceps"],
     unite: "kg", increment: 1.25, chargeMin: 0, dossier: "leg-extension", actif: true,
     info: "Résistance de départ non communiquée par Matrix : regardez l'étiquette « Starting resistance » sur la machine, puis indiquez-la comme charge minimum. En attendant, saisissez seulement le poids des disques, toujours de la même façon.",
     consigne: "Réglez le dossier pour aligner le genou avec l'axe de rotation, boudin posé sur le bas du tibia. Dos collé au dossier, mains sur les poignées. Tendez les jambes sans verrouiller les genoux, redescendez lentement." },
-  { id: "biceps-curl-pupitre", nom: "Curl biceps au pupitre (Varsity)", modele: "Matrix Varsity VY-431",
+  { id: "biceps-curl-pupitre", muscle: "biceps", nom: "Curl biceps au pupitre (Varsity)", modele: "Matrix Varsity VY-431",
     motsCles: ["biceps", "curl biceps", "pupitre"],
     unite: "kg", increment: 1.25, chargeMin: 0, dossier: "biceps-curl-pupitre", actif: true,
     info: "Résistance de départ non communiquée par Matrix : regardez l'étiquette « Starting resistance » sur la machine, puis indiquez-la comme charge minimum. En attendant, saisissez seulement le poids des disques, toujours de la même façon.",
     consigne: "Réglez le siège pour que le dos des bras repose entièrement sur le pupitre, coudes alignés avec l'axe de rotation. Fléchissez les bras sans décoller les coudes, redescendez lentement sans verrouiller en bas." },
-  { id: "triceps-extension", nom: "Extension triceps (Varsity)", modele: "Matrix Varsity VY-432",
+  { id: "triceps-extension", muscle: "triceps", nom: "Extension triceps (Varsity)", modele: "Matrix Varsity VY-432",
     motsCles: ["extension triceps", "triceps extension"],
     unite: "kg", increment: 1.25, chargeMin: 0, dossier: "triceps-extension", actif: true,
     info: "Résistance de départ non communiquée par Matrix : regardez l'étiquette « Starting resistance » sur la machine, puis indiquez-la comme charge minimum. En attendant, saisissez seulement le poids des disques, toujours de la même façon.",

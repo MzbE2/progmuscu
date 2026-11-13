@@ -90,7 +90,13 @@ Ce que garantissent ces règles :
    avec photo, unité, pas, charge de départ (fiches techniques Matrix) et consigne de sécurité. Cochez ceux de votre salle (ou « Tout cocher »),
    puis « Ajouter la sélection ». Un appareil du même type déjà créé (ex. « Leg curl ») est mis à jour sans perdre les tests des étudiants.
    Les fiches marquées « départ à vérifier » n'ont pas de résistance de départ publiée : lisez l'étiquette sur la machine.
-   Le catalogue se complète dans `CATALOGUE` de `js/programmes.js` ; les photos sont dans `img/appareils/<id>/appareil.webp`. Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
+   Le catalogue se complète dans `CATALOGUE` de `js/programmes.js` ; les photos sont dans `img/appareils/<id>/appareil.webp`.
+   **Zones** : chaque appareil a un groupe musculaire (colonne « Muscle », deviné d'après le nom si vide). Les appareils, les maxima
+   et les fiches sont rangés par zone : membres inférieurs, membres supérieurs, abdos & tronc.
+   **Sélection par cycle** : au début d'un cycle, l'appli choisit les appareils de l'étudiant, un par groupe musculaire en alternant
+   bas et haut du corps (force et puissance : 4 ; volume, sculpter et endurance : 6 ; affiner en circuit : 8), en priorité parmi les appareils testés.
+   La sélection reste la même jusqu'au bilan pour suivre la progression. Si un appareil est occupé, « Remplacer » propose un appareil
+   de la même zone pour la séance du jour. Réglages : `NB_APPAREILS` et `ORDRE_SELECTION` dans `js/programmes.js`. Le catalogue se complète dans `CATALOGUE` de `js/programmes.js`.
 2. **Étudiants** : ajoutez-les un par un, ou collez une liste `Nom;Prénom;Groupe` copiée depuis un tableur.
 3. **QR codes** : filtrez par groupe, cliquez sur *Imprimer les cartes* et distribuez-les.
 4. L'étudiant scanne sa carte, fait son test de charge (3 à 10 répétitions) sur chaque appareil, choisit un objectif, puis suit ses séances et remplit son carnet.

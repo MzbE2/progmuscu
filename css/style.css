@@ -220,3 +220,9 @@ tbody tr:hover { background: var(--surface-2); }
 .catalogue-item:has(input:checked) { border-color: var(--accent); }
 .catalogue-item input { width: auto; flex: none; }
 .catalogue-item img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
+
+/* Regroupement par zone musculaire */
+.titre-zone { margin: 18px 4px 8px; display: flex; align-items: baseline; gap: 8px; }
+tr.ligne-zone td { background: var(--bg, #f3f2ef); font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; padding-top: 10px; }
+tr.ligne-etudiant { cursor: pointer; }
+tr.ligne-etudiant:hover td { background: rgba(0,0,0,.03); }

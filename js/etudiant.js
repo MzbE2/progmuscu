@@ -5,7 +5,8 @@ import * as DB from "./db.js";
 import {
   OBJECTIFS, REPS_TEST, REPS_MIN, REPS_MAX, erreurReps, repsDuTest, estimer1RM, maxAffiche, prescription, statutLigne,
   nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode,
-  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos
+  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, attrsPhoto, TYPES_PHOTOS, definirPhotos,
+  grouperParZone, choisirAppareils, remplacant, muscleDe, MUSCLES, NB_APPAREILS
 } from "./programmes.js";
 
 const app = document.getElementById("app");
@@ -21,6 +22,7 @@ let seances = [];
 let onglet = "seance";
 let testEnCours = null; // id de la machine en cours de test
 let objectifApercu = null;
+let remplacements = {}; // appareil occupé → appareil de remplacement (pour la séance en cours seulement)
 
 if (DB.MODE_DEMO) document.getElementById("demo").classList.remove("cache");
 
@@ -127,7 +129,9 @@ function vueMaxima(c) {
       <p class="small muted">Le max sur 1 répétition est estimé par la formule de Brzycki : 1RM = charge × 36 / (37 − répétitions), arrondi à l'incrément inférieur de l'appareil.
       Sur les appareils à plaques en livres, saisissez le chiffre en <b>lbs</b> gravé sur la plaque où vous mettez la goupille.</p>
     </div>
-    ${machines.map(m => carteMax(m)).join("")}`;
+    ${grouperParZone(machines).map(z => `
+      <h3 class="titre-zone">${z.icone} ${esc(z.nom)} <span class="small muted">${z.machines.filter(m => E.tests?.[m.id]).length}/${z.machines.length} testés</span></h3>
+      ${z.machines.map(m => carteMax(m)).join("")}`).join("")}`;
   c.querySelectorAll("[data-tester]").forEach(b => b.onclick = () => { testEnCours = b.dataset.tester; vueMaxima(c); });
   c.querySelectorAll("[data-annuler]").forEach(b => b.onclick = () => { testEnCours = null; vueMaxima(c); });
   brancherFiches(c);
@@ -180,7 +184,7 @@ function carteMax(m) {
   return `
     <div class="carte">
       <div class="entete-carte">
-        <div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div>
+        <div class="entete-appareil">${vignette(m)}<div><h3>${esc(m.nom)}</h3>${etiquetteMuscle(m)}</div></div>
         <button class="${t ? "" : "primaire"}" data-tester="${m.id}">${t ? "Refaire le test" : "Faire le test"}</button>
       </div>
       ${t ? `
@@ -271,12 +275,31 @@ function detailObjectif(id) {
         <div class="stat"><div class="val" style="font-size:1.3rem">${o.format === "circuit" ? "Circuit" : "Classique"}</div><div class="lbl">Format</div></div>
       </div>
       <p class="small">La charge augmente et les répétitions diminuent progressivement au fil du cycle. La dernière séance est une séance bilan avec re-test.</p>
+      <p class="small"><b>${NB_APPAREILS[id] || 6} appareils par séance</b>, choisis pour faire travailler des zones différentes (bas du corps, haut du corps${(NB_APPAREILS[id] || 6) > 6 ? ", abdos" : ""}).
+      Ils restent les mêmes pendant tout le cycle pour suivre vos progrès. Testez d'abord au moins un appareil par zone : l'appli choisit en priorité les appareils testés.</p>
       <div class="consigne">${esc(o.consigne)}</div>
     </div>`;
 }
 
 // ---------------- Onglet : Ma séance ----------------
-function vueSeance(c) {
+function etiquetteMuscle(m) {
+  const mu = muscleDe(m);
+  return mu ? `<span class="small muted">${esc(MUSCLES[mu].nom)}</span>` : "";
+}
+
+// Appareils du cycle : choisis une fois au début du cycle, puis gardés jusqu'au bilan
+async function selectionDuCycle() {
+  const actifs = machines;
+  let ids = (E.objectif.selection || []).filter(id => actifs.some(m => m.id === id));
+  if (!ids.length) {
+    ids = choisirAppareils(E.objectif.type, actifs, E.tests || {}, E.objectif.cycleId || E.code);
+    const objectif = { ...E.objectif, selection: ids };
+    try { await DB.majEtudiant(E.code, { objectif }); E.objectif = objectif; } catch (e) { /* on garde la sélection en mémoire */ }
+  }
+  return ids.map(id => actifs.find(m => m.id === id));
+}
+
+async function vueSeance(c) {
   if (!E.objectif || E.objectif.termine) {
     c.innerHTML = `<div class="carte vide">
       <h3>${E.objectif?.termine ? "Cycle terminé 🎉" : "Pas encore d'objectif"}</h3>
@@ -297,7 +320,7 @@ function vueSeance(c) {
         <h2>Séance ${n} / ${o.seances} — Bilan 🏁</h2>
         <p>Dernière séance du cycle : refaites le test (3 à 10 répétitions) sur chaque appareil pour mesurer vos progrès.</p>
       </div>
-      ${machines.map(m => {
+      ${(await selectionDuCycle()).map(m => {
         const t = E.tests?.[m.id];
         const testeAuj = t && new Date(t.date).toDateString() === new Date().toDateString();
         const prec = t?.historique?.length > 1 ? t.historique[t.historique.length - 2].max : null;
@@ -319,7 +342,9 @@ function vueSeance(c) {
     return;
   }
 
-  const lignes = machines.map(m => {
+  const selection = await selectionDuCycle();
+  const duJour = selection.map(m => machines.find(x => x.id === remplacements[m.id]) || m);
+  const lignes = duJour.map(m => {
     const t = E.tests?.[m.id];
     if (!t) return { m, p: null };
     const p = prescription(E.objectif.type, n, t.max, m, E.objectif.ajust?.[m.id] || 0);
@@ -333,10 +358,14 @@ function vueSeance(c) {
       <div class="progression" style="margin:10px 0"><div style="width:${(n - 1) / o.seances * 100}%"></div></div>
       ${o.format === "circuit" ? `<div class="consigne"><b>Circuit :</b> enchaînez une série sur chaque appareil, puis récupérez ${esc(o.recup)} à la fin du tour. Répétez le nombre de tours indiqué.</div>` : ""}
       <p class="small muted">Commencez par 5 à 10 min d'échauffement général (vélo, rameur, mobilité).</p>
+      <p class="small"><b>Vos ${selection.length} appareils pour ce cycle</b> (un par groupe musculaire, gardés jusqu'au bilan pour mesurer vos progrès) :<br>
+        ${duJour.map(m => `${esc(m.nom)}${muscleDe(m) ? ` <span class="muted">(${esc(MUSCLES[muscleDe(m)].nom)})</span>` : ""}`).join(" · ")}</p>
+      <p class="small muted">Un appareil est occupé ? Touchez « Remplacer » sur sa carte : l'appli propose un appareil qui travaille la même zone, pour aujourd'hui seulement.</p>
     </div>
-    ${lignes.map(({ m, p }) => p ? cartePresc(m, p, o) : `
-      <div class="carte"><div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div><button data-retest="${m.id}">Faire le test</button></div>
-      <p class="muted small">Faites d'abord le test de charge pour obtenir votre programme sur cet appareil.</p></div>`).join("")}
+    ${lignes.map(({ m, p }, i) => p ? cartePresc(m, p, o, selection[i]) : `
+      <div class="carte"><div class="entete-carte"><div class="entete-appareil">${vignette(m)}<div><h3>${esc(m.nom)}</h3>${etiquetteMuscle(m)}</div></div><button data-retest="${m.id}">Faire le test</button></div>
+      <p class="muted small">Faites d'abord le test de charge pour obtenir votre programme sur cet appareil.</p>
+      ${boutonRemplacer(selection[i])}</div>`).join("")}
     ${avecPresc.length ? `
       <div class="carte">
         <label for="comm">Commentaire (facultatif)</label>
@@ -346,6 +375,17 @@ function vueSeance(c) {
 
   c.querySelectorAll("[data-retest]").forEach(b => b.onclick = () => { onglet = "maxima"; testEnCours = b.dataset.retest; rendre(); });
   c.querySelectorAll("[data-recup]").forEach(b => b.onclick = () => lancerMinuteur(+b.dataset.recup));
+  c.querySelectorAll("[data-remplacer]").forEach(b => b.onclick = () => {
+    const orig = machines.find(x => x.id === b.dataset.remplacer);
+    const actuel = machines.find(x => x.id === remplacements[orig.id]) || orig;
+    // appareils déjà utilisés aujourd'hui (ou déjà essayés pour ce poste) : exclus
+    const exclus = [...duJour.map(x => x.id), ...(b.dataset.essayes || "").split(",").filter(Boolean)];
+    const r = remplacant(actuel, machines, exclus.concat(orig.id), E.tests || {});
+    if (!r) { if (remplacements[orig.id]) { delete remplacements[orig.id]; vueSeance(c); toast("Retour à l'appareil prévu"); } else toast("Aucun autre appareil de cette zone n'est disponible."); return; }
+    remplacements[orig.id] = r.id;
+    vueSeance(c);
+    toast(`Aujourd'hui : ${r.nom}`);
+  });
   brancherFiches(c);
   c.querySelectorAll(".stepper").forEach(st => {
     const span = st.querySelector("span"), max = +st.dataset.max;
@@ -357,11 +397,18 @@ function vueSeance(c) {
   if (v) v.onclick = () => validerSeance(c, avecPresc, n);
 }
 
-function cartePresc(m, p, o) {
+function boutonRemplacer(orig) {
+  if (!orig) return "";
+  const r = remplacements[orig.id] ? machines.find(x => x.id === remplacements[orig.id]) : null;
+  return `<p class="small" style="margin-top:6px">${r ? `↻ Remplace <b>${esc(orig.nom)}</b> aujourd'hui. ` : ""}<button class="lien small" data-remplacer="${orig.id}">${r ? "Autre appareil" : "Appareil occupé ? Remplacer"}</button></p>`;
+}
+
+function cartePresc(m, p, o, orig) {
   const tours = o.format === "circuit";
   return `
     <div class="carte" data-machine="${m.id}">
-      <div class="entete-carte"><div class="entete-appareil">${vignette(m)}<h3>${esc(m.nom)}</h3></div><span class="pastille">${p.pct} % du max</span></div>
+      <div class="entete-carte"><div class="entete-appareil">${vignette(m)}<div><h3>${esc(m.nom)}</h3>${etiquetteMuscle(m)}</div></div><span class="pastille">${p.pct} % du max</span></div>
+      ${boutonRemplacer(orig)}
       <div class="presc">
         <div class="gros num">${p.series} <small>${tours ? "tours" : "séries"}</small></div>
         <div class="gros num">× ${p.reps} <small>rép.</small></div>
@@ -428,6 +475,7 @@ async function validerSeance(c, avecPresc, n) {
     obj.nbFaites = n; obj.derniere = new Date().toISOString();
     await DB.majEtudiant(E.code, { objectif: obj });
     E.objectif = obj;
+    remplacements = {};
     seances = await DB.listerSeances(E.code);
     window.scrollTo(0, 0);
     rendre();
