@@ -199,3 +199,13 @@ tbody tr:hover { background: var(--surface-2); }
   .wrap { max-width: none; padding: 0; }
   .qr-grille { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Photos des appareils (espace enseignant, utilisable au téléphone) */
+.photos-appareils { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+.photo-appareil { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.photo-cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.photo-case { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.photo-bouton { width: 100%; aspect-ratio: 3 / 4; border: 2px dashed var(--line); border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 26px; cursor: pointer; overflow: hidden; margin: 0; }
+.photo-bouton img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-bouton:has(img) { border-style: solid; }

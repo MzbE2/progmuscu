@@ -2,7 +2,7 @@
 //  prof.js — Espace enseignant (PC)
 // =====================================================================
 import * as DB from "./db.js";
-import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto } from "./programmes.js";
+import { OBJECTIFS, maxAffiche, estimer1RM, erreurReps, repsDuTest, REPS_MIN, REPS_MAX, REPS_TEST, fmtKg, fmtDate, RESSENTIS, uniteDe, fmtChargeCourt, urlPhoto, TYPES_PHOTOS, definirPhotos, photosDe } from "./programmes.js";
 
 const app = document.getElementById("app");
 const modal = document.getElementById("modal");
@@ -80,6 +80,7 @@ document.getElementById("btn-deco").onclick = async () => { await DB.profDeconne
 
 async function charger() {
   [etudiants, machines] = await Promise.all([DB.listerEtudiants(), DB.getMachines()]);
+  try { definirPhotos(await DB.getPhotos(machines)); } catch (e) { /* sans photos */ }
   etudiants.sort((a, b) => (a.nom + a.prenom).localeCompare(b.nom + b.prenom, "fr"));
 }
 
@@ -249,12 +250,33 @@ async function ficheEtudiant(code) {
 function vueAppareils(c) {
   c.innerHTML = `
     <div class="carte">
+      <h3>📷 Photos des appareils</h3>
+      <p class="small muted">À la salle, ouvrez cette page sur votre téléphone et touchez une case pour <b>prendre la photo</b> (ou en choisir une dans la galerie).
+      Elle est enregistrée tout de suite et visible par les étudiants. Touchez à nouveau une photo pour la remplacer.</p>
+      <div class="photos-appareils">
+        ${machines.map(m => `<div class="photo-appareil">
+          <b>${esc(m.nom)}</b>
+          <div class="photo-cases">${TYPES_PHOTOS.map(([type, titre]) => {
+            const url = urlPhoto(m, type), prise = !!photosDe(m.id)[type];
+            return `<div class="photo-case">
+              <label class="photo-bouton" title="${esc(titre)}">
+                ${url ? `<img src="${url}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'📷'}))">` : `<span>📷</span>`}
+                <input type="file" accept="image/*" data-photo="${esc(m.id)}" data-type="${type}" hidden>
+              </label>
+              <span class="small muted">${esc(titre)}</span>
+              ${prise ? `<button class="lien danger small" data-suppr-photo="${esc(m.id)}" data-type="${type}">Retirer</button>` : ""}
+            </div>`;
+          }).join("")}</div>
+        </div>`).join("")}
+      </div>
+    </div>
+    <div class="carte">
       <div class="entete-carte"><h3>Appareils de la salle</h3><button id="btn-ajout">+ Ajouter un appareil</button></div>
       <p class="small muted"><b>Unité</b> : « lbs » pour une pile de plaques graduée en livres (l'étudiant saisit le chiffre gravé sur la plaque), « kg » pour une barre ou des disques.
       <b>Pas</b> : le plus petit saut de charge (2,5 kg pour une barre, 5 lbs pour une pile).
       <b>Min / Max</b> : la plus légère et la plus lourde charge possibles (barre à vide, première et dernière plaque).</p>
-      <p class="small muted"><b>Dossier photos</b> : le nom du dossier déposé sur GitHub dans <code>img/appareils/</code>, contenant
-      <code>appareil.webp</code>, <code>consigne.webp</code> et <code>pile.webp</code>. Laissez vide si l'appareil n'a pas de photos.</p>
+      <p class="small muted"><b>Dossier photos</b> (facultatif) : seulement si vous déposez vous-même des photos sur GitHub dans <code>img/appareils/</code>.
+      Le plus simple est d'utiliser les boutons 📷 ci-dessus.</p>
       <div class="table-scroll"><table class="table-appareils">
         <thead><tr><th>Photo</th><th>Nom</th><th>Unité</th><th>Pas</th><th>Min</th><th>Max</th><th>Dossier photos</th><th>Consigne de sécurité</th><th>Actif</th><th></th></tr></thead>
         <tbody id="tb-app">${machines.map((m, i) => `<tr data-i="${i}">
@@ -289,6 +311,35 @@ function vueAppareils(c) {
     const td = inp.closest("tr").querySelector("td");
     td.innerHTML = apercu({ dossier: dossierPropre(inp.value) });
   });
+  // Photos : compression puis enregistrement immédiat
+  c.querySelectorAll("[data-photo]").forEach(inp => inp.onchange = async () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    const m = machines.find(x => x.id === inp.dataset.photo);
+    if (!m) return;
+    try {
+      toast("Envoi de la photo…");
+      // Un appareil tout juste ajouté doit exister dans la liste enregistrée
+      machines = lire().filter(x => x.nom);
+      await DB.saveMachines(machines);
+      const dataUrl = await compresserPhoto(f);
+      await DB.savePhoto(m.id, inp.dataset.type, dataUrl);
+      definirPhotos({ ...Object.fromEntries(machines.map(x => [x.id, photosDe(x.id)])), [m.id]: { ...photosDe(m.id), [inp.dataset.type]: dataUrl } });
+      toast("Photo enregistrée ✓");
+      vueAppareils(c);
+    } catch (e) {
+      console.error(e);
+      toast("Échec de l'envoi : vérifiez la connexion et réessayez.");
+    }
+  });
+  c.querySelectorAll("[data-suppr-photo]").forEach(b => b.onclick = async () => {
+    if (!(await demander("Retirer cette photo ?", "Retirer"))) return;
+    const id = b.dataset.supprPhoto, type = b.dataset.type;
+    await DB.savePhoto(id, type, null);
+    const p = { ...photosDe(id) }; delete p[type];
+    definirPhotos({ ...Object.fromEntries(machines.map(x => [x.id, photosDe(x.id)])), [id]: p });
+    toast("Photo retirée"); vueAppareils(c);
+  });
   c.querySelector("#btn-ajout").onclick = () => {
     machines = lire();
     machines.push({ id: "m" + Date.now().toString(36), nom: "Nouvel appareil", unite: "lbs", increment: 5, chargeMin: 5, chargeMax: 100, dossier: "", consigne: "", actif: true });
@@ -304,7 +355,24 @@ function vueAppareils(c) {
   };
 }
 
-// Petite photo de l'appareil, ou un tiret si le dossier n'existe pas (encore) sur GitHub
+// Réduit la photo du téléphone (souvent 3 à 5 Mo) à environ 100 Ko : 900 px max, JPEG.
+// Firestore limite un document à 1 Mo ; les 3 photos d'un appareil tiennent largement.
+async function compresserPhoto(fichier, cote = 900) {
+  let src;
+  try { src = await createImageBitmap(fichier, { imageOrientation: "from-image" }); }
+  catch (e) {
+    src = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = URL.createObjectURL(fichier); });
+  }
+  const w0 = src.width, h0 = src.height, r = Math.min(1, cote / Math.max(w0, h0));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(w0 * r); cv.height = Math.round(h0 * r);
+  cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
+  let q = 0.75, url = cv.toDataURL("image/jpeg", q);
+  while (url.length > 250000 && q > 0.35) { q -= 0.1; url = cv.toDataURL("image/jpeg", q); }
+  return url;
+}
+
+// Petite photo de l'appareil, ou un tiret s'il n'y en a pas
 function apercu(m) {
   const url = urlPhoto(m, "appareil");
   return url

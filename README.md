@@ -83,6 +83,8 @@ Ce que garantissent ces règles :
 ## 6. Utilisation
 
 1. **Appareils** : vérifiez Squat et Développé couché (incrément 2,5 kg, barre 20 kg) et ajoutez vos machines.
+   **Photos** : à la salle, ouvrez `prof.html` sur votre téléphone, onglet *Appareils*, et touchez 📷 sous chaque appareil (photo de l'appareil, de la consigne, des charges).
+   La photo est compressée (≈ 100 Ko) et enregistrée tout de suite dans Firestore : rien à déposer sur GitHub, aucune règle à republier.
 2. **Étudiants** : ajoutez-les un par un, ou collez une liste `Nom;Prénom;Groupe` copiée depuis un tableur.
 3. **QR codes** : filtrez par groupe, cliquez sur *Imprimer les cartes* et distribuez-les.
 4. L'étudiant scanne sa carte, fait son test de charge (3 à 10 répétitions) sur chaque appareil, choisit un objectif, puis suit ses séances et remplit son carnet.

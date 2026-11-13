@@ -80,6 +80,28 @@ export async function saveMachines(liste) {
   await fs.setDoc(fs.doc(db, "config", "machines"), { liste });
 }
 
+// ---------- Photos des appareils (prises depuis l'espace enseignant) ----------
+// Une photo = image JPEG compressée (≈ 100 Ko) stockée dans le document config/photos-<idAppareil>.
+// La collection « config » est déjà lisible par tous et modifiable par l'enseignant :
+// aucune modification des règles Firestore n'est nécessaire.
+export async function getPhotos(machines) {
+  if (MODE_DEMO) return clone(lireDemo().photos || {});
+  await fb();
+  const res = await Promise.all(machines.map(m =>
+    fs.getDoc(fs.doc(db, "config", "photos-" + m.id)).then(s => [m.id, s.exists() ? s.data() : null]).catch(() => [m.id, null])));
+  return Object.fromEntries(res.filter(([, v]) => v));
+}
+// dataUrl = null pour supprimer la photo
+export async function savePhoto(machineId, type, dataUrl) {
+  if (MODE_DEMO) {
+    const d = lireDemo(); d.photos ||= {}; d.photos[machineId] ||= {};
+    if (dataUrl) d.photos[machineId][type] = dataUrl; else delete d.photos[machineId][type];
+    ecrireDemo(); return;
+  }
+  await fb();
+  await fs.setDoc(fs.doc(db, "config", "photos-" + machineId), { [type]: dataUrl ? dataUrl : fs.deleteField() }, { merge: true });
+}
+
 // ---------- Étudiants ----------
 export async function getEtudiant(code) {
   code = String(code || "").trim().toUpperCase();

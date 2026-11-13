@@ -5,7 +5,7 @@ import * as DB from "./db.js";
 import {
   OBJECTIFS, REPS_TEST, REPS_MIN, REPS_MAX, erreurReps, repsDuTest, estimer1RM, maxAffiche, prescription, statutLigne,
   nouvelAjustement, RESSENTIS, fmtKg, fmtDate, arrondir, genererCode,
-  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, TYPES_PHOTOS
+  uniteDe, fmtCharge, fmtChargeCourt, enKg, urlPhoto, TYPES_PHOTOS, definirPhotos
 } from "./programmes.js";
 
 const app = document.getElementById("app");
@@ -33,6 +33,7 @@ function toast(msg) {
 // ---------------- Connexion ----------------
 async function demarrer() {
   machines = (await DB.getMachines()).filter(m => m.actif !== false);
+  try { definirPhotos(await DB.getPhotos(machines)); } catch (e) { /* sans photos */ }
   const url = new URL(location.href);
   const depuisLien = url.searchParams.get("c") || location.hash.replace("#", "");
   const code = depuisLien || memo.get(CLE_CODE);
@@ -478,7 +479,7 @@ function ouvrirFiche(id) {
       ${m.consigne ? `<div class="consigne">⚠️ ${esc(m.consigne)}</div>` : ""}
       ${uniteDe(m) === "lbs" ? `<p class="small muted">Charges en livres : lisez le chiffre en <b>lbs</b> sur la plaque${m.chargeMin && m.chargeMax ? ` (de ${fmtChargeCourt(m.chargeMin, m)} à ${fmtChargeCourt(m.chargeMax, m)}, par ${fmtChargeCourt(m.increment, m)})` : ""}.</p>` : ""}
       <div class="fiche-photos">
-        ${TYPES_PHOTOS.map(([type, titre]) => `
+        ${TYPES_PHOTOS.filter(([type]) => urlPhoto(m, type)).map(([type, titre]) => `
           <figure><img src="${urlPhoto(m, type)}" alt="${esc(titre)} — ${esc(m.nom)}" loading="lazy" onerror="this.parentElement.remove()">
           <figcaption>${esc(titre)}</figcaption></figure>`).join("")}
       </div>

@@ -96,14 +96,23 @@ export function enKg(v, machine) {
   return uniteDe(machine) === "lbs" ? fmtKg(Math.round(Number(v) * LBS_EN_KG * 10) / 10) : "";
 }
 
-// Photos : déposées sur GitHub dans img/appareils/<dossier>/
-// appareil.webp (photo de l'appareil), consigne.webp (pictogramme), pile.webp (pile de charges)
+// Photos : deux sources possibles
+//  1. prises depuis l'espace enseignant (bouton 📷, sur téléphone) → stockées dans Firestore
+//  2. déposées sur GitHub dans img/appareils/<dossier>/ :
+//     appareil.webp (photo de l'appareil), consigne.webp (pictogramme), pile.webp (pile de charges)
+// Une photo prise depuis l'appli est prioritaire sur celle du dossier GitHub.
 export const TYPES_PHOTOS = [
   ["appareil", "L'appareil"],
   ["consigne", "La consigne"],
   ["pile", "Les charges"]
 ];
+let PHOTOS = {}; // { idAppareil: { appareil: "data:image/jpeg;base64,…", consigne: …, pile: … } }
+export function definirPhotos(map) { PHOTOS = map || {}; }
+export function photosDe(machineId) { return PHOTOS[machineId] || {}; }
+
 export function urlPhoto(machine, type) {
+  const prise = PHOTOS[machine?.id]?.[type];
+  if (prise) return prise;
   const d = String(machine?.dossier || "").trim();
   return d ? `img/appareils/${encodeURIComponent(d)}/${type}.webp` : "";
 }
